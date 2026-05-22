@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+
+  backend:
+
+    build:
+      context: ./backend_python
+
+    container_name: forested_backend
+
+    volumes:
+      - ./backend_python:/app
+
+    working_dir: /app
+
+    tty: true
+
+  frontend:
+
+    build:
+      context: ./front
+
+    container_name: forested_frontend
+
+    volumes:
+      - ./front:/app
+
+    ports:
+      - "8050:8050"
+
+    working_dir: /app
+
+    tty: true
+
