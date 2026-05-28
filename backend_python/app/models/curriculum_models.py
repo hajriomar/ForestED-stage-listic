@@ -1,3 +1,24 @@
+"""
+Méta-modèle curriculum du projet ForestED.
+
+Ce module définit les modèles Pydantic utilisés pour représenter
+la structure pédagogique d’un programme de formation.
+
+La hiérarchie principale est :
+
+Programme
+    -> PériodeProgramme
+        -> UniteEnseignement
+            -> ElementPedagogique
+                -> AcquisApprentissage
+                -> ActivitePedagogique
+                -> RessourcePedagogique
+                -> Evaluation
+                -> Enseignant
+
+Ces modèles servent de structure canonique après transformation
+des données brutes issues des fiches de cours.
+"""
 from pydantic import BaseModel,Field, field_validator,model_validator,EmailStr
 from typing import List, Optional
 
@@ -8,20 +29,21 @@ class StrictBaseModel(BaseModel):
     }
 
 
-# =========================
-# Ressource pédagogique
-# =========================
+
 class RessourcePedagogique(StrictBaseModel):
 
-   
+    """
+    Représente une ressource utilisée dans un enseignement.
+
+    Exemple : support de cours, livre, dataset, lien Moodle.
+    """
+
     id: str
     titre: str
     type: Optional[str] = None
 
 
-# =========================
-# Activité pédagogique
-# =========================
+
 class ActivitePedagogique(StrictBaseModel):
 
     
@@ -30,9 +52,7 @@ class ActivitePedagogique(StrictBaseModel):
     type: Optional[str] = None
 
 
-# =========================
-# Evaluation
-# =========================
+
 class Evaluation(StrictBaseModel):
 
     id: str
@@ -40,16 +60,23 @@ class Evaluation(StrictBaseModel):
     ponderation: Optional[float] = None
 
 
-# =========================
-# Acquis d’apprentissage
-# =========================
+
 class AcquisApprentissage(StrictBaseModel):
+
+    """
+    Représente un acquis d’apprentissage attendu
+    à l’issue d’un élément pédagogique.
+    """
 
     id: str
     description: str
 
 
 class Enseignant(StrictBaseModel):
+    """
+    Représente un enseignant ou responsable pédagogique
+    associé à un élément pédagogique.
+    """
 
     id: str
 
@@ -62,10 +89,15 @@ class Enseignant(StrictBaseModel):
     role: Optional[str] = None
 
 
-# =========================
-# Élément pédagogique
-# =========================
+
 class ElementPedagogique(StrictBaseModel):
+
+    """
+    Représente un cours, module ou élément pédagogique.
+
+    Il contient les volumes horaires, les acquis,
+    les ressources, les évaluations et les enseignants.
+    """
 
     id: str
     nom: str
@@ -121,10 +153,14 @@ class ElementPedagogique(StrictBaseModel):
         return self
 
 
-# =========================
-# UE
-# =========================
+
 class UniteEnseignement(StrictBaseModel):
+
+    """
+    Représente une unité d’enseignement.
+
+    Une UE regroupe un ou plusieurs éléments pédagogiques.
+    """
 
     id: str
     code: str
@@ -147,9 +183,7 @@ class UniteEnseignement(StrictBaseModel):
         return v
 
 
-# =========================
-# Stage
-# =========================
+
 class Stage(StrictBaseModel):
 
     id: str
@@ -170,10 +204,17 @@ class Stage(StrictBaseModel):
         return v
 
 
-# =========================
-# Période programme
-# =========================
+
 class PeriodeProgramme(StrictBaseModel):
+
+    """
+    Représente une période pédagogique du programme.
+
+    Elle correspond généralement à un semestre,
+    mais peut aussi représenter une période spéciale
+    comme TRANSVERSE pour les modules non rattachés
+    à un semestre précis.
+    """
 
     id: str
 
@@ -195,10 +236,14 @@ class PeriodeProgramme(StrictBaseModel):
         return v
 
 
-# =========================
-# Programme
-# =========================
+
 class Programme(StrictBaseModel):
+    """
+    Représente un programme de formation complet.
+
+    Exemple : IDU, BUT Informatique ou autre parcours.
+    Il contient les périodes pédagogiques du programme.
+    """
 
     id: str
 

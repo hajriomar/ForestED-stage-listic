@@ -1,3 +1,20 @@
+"""
+JSON extractor du pipeline ETL.
+
+Ce module est responsable de l’extraction
+et du chargement des fichiers JSON bruts.
+
+Le rôle principal de l’extractor est :
+- lire les fichiers JSON source,
+- valider leur existence,
+- parser le contenu JSON,
+- gérer les erreurs de lecture,
+- centraliser les logs d’extraction.
+
+Ce composant représente l’étape Extract
+du pipeline ETL.
+"""
+
 import json
 import logging
 from pathlib import Path
@@ -6,18 +23,36 @@ logger = logging.getLogger(__name__)
 
 
 def extract_json(file_path: str):
-    """Extract JSON data from file with error handling.
-    
-    Args:
-        file_path: Path to the JSON file
-        
-    Returns:
-        dict: Parsed JSON data
-        
-    Raises:
-        FileNotFoundError: If file does not exist
-        json.JSONDecodeError: If file is not valid JSON
     """
+    Extraire des données depuis un fichier JSON.
+
+    Cette fonction :
+    - vérifie l’existence du fichier,
+    - ouvre le fichier JSON,
+    - parse son contenu,
+    - retourne les données Python correspondantes.
+
+    Args:
+        file_path (str):
+            Chemin du fichier JSON à charger.
+
+    Returns:
+        dict:
+            Données JSON parsées.
+
+    Raises:
+        FileNotFoundError:
+            Si le fichier n’existe pas.
+
+        json.JSONDecodeError:
+            Si le fichier contient
+            un JSON invalide.
+
+        Exception:
+            Toute autre erreur inattendue
+            pendant l’extraction.
+    """
+    
     file_path = Path(file_path)
     
     if not file_path.exists():

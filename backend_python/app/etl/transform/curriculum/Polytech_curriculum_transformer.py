@@ -1,3 +1,23 @@
+"""
+Transformer curriculum pour les données Polytech.
+
+Ce module transforme les fiches de cours brutes au format JSON
+vers deux représentations :
+
+1. Une représentation canonique respectant le méta-modèle curriculum :
+   Programme -> Période -> UE -> Élément pédagogique.
+
+2. Une représentation plate destinée aux usages analytics,
+   visualisation ou BI.
+
+Le transformer applique aussi quelques règles métier :
+- validation des codes modules,
+- déduction du semestre depuis le code module,
+- gestion des modules transverses,
+- extraction des volumes horaires,
+- extraction des enseignants depuis les contacts.
+"""
+
 from app.models.curriculum_models import (
     Programme,
     PeriodeProgramme,
@@ -10,13 +30,29 @@ from app.models.curriculum_models import (
 import re
 
 
-class IDUCurriculumTransformer:
+class PolytechCurriculumTransformer:
 
-        # ==========================================
-    # FLATTEN PROGRAMME
-    # ==========================================
+    """
+    Transformer des données curriculum Polytech.
+
+    Cette classe prend en entrée les fiches de cours brutes
+    et produit un modèle canonique curriculum ainsi qu'un format flat.
+    """
+
 
     def flatten_programme(self, programme):
+        
+        """
+        Convertir un programme canonique en liste plate.
+
+        Args:
+            programme (Programme): Programme curriculum structuré.
+
+        Returns:
+            list[dict]: Liste de lignes plates contenant les informations
+            principales du programme, des périodes, des UE, des éléments
+            pédagogiques, des heures et des enseignants.
+        """
 
         rows = []
 
@@ -36,40 +72,25 @@ class IDUCurriculumTransformer:
 
                     row = {
 
-                        # ==========================
-                        # PROGRAMME
-                        # ==========================
 
                         "programme_id": programme.id,
                         "programme_nom": programme.nom,
                         "programme_niveau": programme.niveau,
 
-                        # ==========================
-                        # SEMESTER
-                        # ==========================
+                      
 
                         "periode_id": periode.id,
                         "semestre": periode.numero,
 
-                        # ==========================
-                        # UE
-                        # ==========================
 
                         "ue_id": ue.id,
                         "ue_code": ue.code,
                         "ue_nom": ue.intitule,
 
-                        # ==========================
-                        # ELEMENT
-                        # ==========================
-
                         "element_id": element.id,
                         "element_nom": element.nom,
                         "element_type": element.type,
 
-                        # ==========================
-                        # HOURS
-                        # ==========================
 
                         "ects": element.ects,
                         "cm": element.cm,
@@ -78,9 +99,6 @@ class IDUCurriculumTransformer:
                         "projet": element.projet,
                         "volume_total": element.volume_total,
 
-                        # ==========================
-                        # TEACHERS
-                        # ==========================
 
                         "enseignants": ", ".join(
                             enseignants
@@ -90,14 +108,28 @@ class IDUCurriculumTransformer:
                     rows.append(row)
 
         return rows
-    
-    # ============================== ============
-    # PARSE HOURS
-    # ==========================================
+
 
     @staticmethod
     def parse_hours(value):
-        """Parse hours from string format (e.g., '12h' or '12,5')."""
+
+        """
+        Convertir une valeur horaire brute en nombre flottant.
+
+        Cette méthode accepte des formats comme :
+        - "12h"
+        - "12,5h"
+        - "12.5"
+        - valeur vide ou absente.
+
+        Args:
+            value: Valeur horaire brute provenant du JSON.
+
+        Returns:
+            float: Nombre d'heures converti. Retourne 0.0 si la valeur
+            est absente ou non convertible.
+        """
+
         if not value:
             return 0.0
 
@@ -109,15 +141,20 @@ class IDUCurriculumTransformer:
         except (ValueError, AttributeError):
             return 0.0
 
-    # ==========================================
-    # TRANSFORM
-    # ==========================================
 
     def transform(self, data):
 
-        # ==========================================
-        # PROGRAMME
-        # ==========================================
+        """
+        Transformer les fiches de cours brutes en modèle curriculum.
+
+        Args:
+            data (dict): Données JSON brutes contenant une clé "fiches".
+
+        Returns:
+            dict: Dictionnaire contenant :
+                - "canonical": objet Programme structuré.
+                - "flat": liste plate pour analytics.
+        """
 
         programme = Programme(
             id="IDU",
@@ -129,44 +166,27 @@ class IDUCurriculumTransformer:
             periodes=[]
         )
 
-        # ==========================================
-        # MAP SEMESTRES
-        # ==========================================
 
         periodes_map = {}
 
-        # ==========================================
-        # FICHES
-        # ==========================================
 
         fiches = data.get("fiches", [])
 
-        # ==========================================
-        # LOOP COURSES
-        # ==========================================
 
         for item in fiches:
 
-            # ==========================================
-            # COURSE NAME
-            # ==========================================
 
             nom_cours = item.get(
                 "nom",
                 "Cours inconnu"
             )
 
-            # ==========================================
-            # COURSE CODE
-            # ==========================================
 
             code = item.get(
                 "code",
                 "UNKNOWN"
             )
-            # ==========================================
-            # VALID MODULE CODE
-            # ==========================================
+
 
             if not re.search(
                 r'[A-Z]{2,}\d{3}',
@@ -179,9 +199,7 @@ class IDUCurriculumTransformer:
 
                 continue
 
-            # ==========================================
-            # SEMESTER DETECTION
-            # ==========================================
+
 
             semestre_num = None
 
@@ -189,9 +207,7 @@ class IDUCurriculumTransformer:
                 "semestre"
             )
 
-            # ==========================================
-            # USE EXISTING SEMESTER
-            # ==========================================
+
 
             if semestre and semestre != "S0":
 
@@ -206,9 +222,6 @@ class IDUCurriculumTransformer:
                         semestre_match.group(1)
                     )
 
-            # ==========================================
-            # SPECIAL TRANSVERSAL MODULES
-            # ==========================================
 
             is_transverse = any(
                 prefix in code
@@ -223,9 +236,7 @@ class IDUCurriculumTransformer:
             )
 
     
-            # ==========================================
-            # INFER FROM CODE
-            # ==========================================
+
 
             if semestre_num is None and not is_transverse:
 
@@ -250,9 +261,6 @@ class IDUCurriculumTransformer:
                             first_digit
                         )
 
-            # ==========================================
-            # FINAL FALLBACK
-            # ==========================================
 
             if semestre_num is None:
 
@@ -267,9 +275,6 @@ class IDUCurriculumTransformer:
 
                 periode_id = f"S{semestre_num}"
                 
-            # ==========================================
-            # CREATE SEMESTER
-            # ==========================================
 
             if periode_id not in periodes_map:
 
@@ -287,9 +292,6 @@ class IDUCurriculumTransformer:
                     periode
                 )
 
-            # ==========================================
-            # UE
-            # ==========================================
 
             ue = UniteEnseignement(
                 id=f"UE_{code}",
@@ -300,9 +302,6 @@ class IDUCurriculumTransformer:
                 elements_pedagogiques=[]
             )
 
-            # ==========================================
-            # HOURS
-            # ==========================================
 
             cm = self.parse_hours(
                 item.get("CM")
@@ -320,9 +319,6 @@ class IDUCurriculumTransformer:
                 item.get("Projet")
             )
 
-            # ==========================================
-            # LEARNING OUTCOMES
-            # ==========================================
 
             acquis_list = []
 
@@ -341,9 +337,6 @@ class IDUCurriculumTransformer:
                 acquis_list.append(acquis)
 
 
-            # ==========================================
-            # ENSEIGNANTS
-            # ==========================================
             seen_emails = set()
             enseignants = []
 
@@ -354,9 +347,6 @@ class IDUCurriculumTransformer:
 
             for index, contact in enumerate(contacts):
 
-                # ==========================
-                # CLEAN EMAIL
-                # ==========================
 
                 raw_email = contact.get("email")
 
@@ -369,18 +359,12 @@ class IDUCurriculumTransformer:
                     if raw_email != "":
                         email = raw_email
 
-                # ==========================
-                # DUPLICATE CHECK
-                # ==========================
 
                 if email in seen_emails:
                     continue
 
                 seen_emails.add(email)
 
-                # ==========================
-                # CREATE TEACHER
-                # ==========================
 
                 enseignant = Enseignant(
 
@@ -403,9 +387,6 @@ class IDUCurriculumTransformer:
                 enseignants.append(
                     enseignant
                 )
-            # ==========================================
-            # PEDAGOGICAL ELEMENT
-            # ==========================================
 
             element = ElementPedagogique(
                 id=code,
@@ -422,17 +403,11 @@ class IDUCurriculumTransformer:
                 enseignants=enseignants
             )
 
-            # ==========================================
-            # ADD ELEMENT TO UE
-            # ==========================================
 
             ue.elements_pedagogiques.append(
                 element
             )
 
-            # ==========================================
-            # ADD UE TO SEMESTER
-            # ==========================================
 
             periodes_map[
                 periode_id
@@ -440,9 +415,6 @@ class IDUCurriculumTransformer:
                 ue
             )
 
-        # ==========================================
-        # FLATTEN & RETURN
-        # ==========================================
 
         flat_rows = self.flatten_programme(
             programme

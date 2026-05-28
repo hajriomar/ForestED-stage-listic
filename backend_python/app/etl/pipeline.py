@@ -1,3 +1,30 @@
+"""
+Pipeline ETL principal du projet ForestED.
+
+Ce module orchestre l'ensemble du processus ETL :
+
+1. Parcours des données brutes organisées
+   par domaine et par source.
+
+2. Extraction des fichiers JSON.
+
+3. Sélection automatique du transformer
+   approprié via le Factory Pattern.
+
+4. Transformation des données vers :
+   - un modèle canonique respectant
+     le méta-modèle métier,
+   - un format flat destiné à l'analyse.
+
+5. Sauvegarde des résultats dans :
+   - data/processed
+   - data/analytics
+
+L'architecture du pipeline est conçue pour être
+extensible afin d'ajouter facilement de nouvelles
+sources de données ou de nouveaux transformers.
+"""
+
 import json
 import logging
 from pathlib import Path
@@ -30,15 +57,32 @@ ANALYTICS_FOLDER = "app/data/analytics"
 # PROCESS FILE
 # ==========================================
 
-def process_file(domain, file_path):
-    """Process a single JSON file through ETL pipeline.
-    
+def process_file(domain, source_name,file_path):
+    """
+    Traiter un fichier JSON unique via le pipeline ETL.
+
+    Cette fonction :
+    - extrait les données brutes,
+    - sélectionne le transformer adapté,
+    - transforme les données,
+    - génère les sorties canonical et flat,
+    - sauvegarde les résultats.
+
     Args:
-        domain: Domain name (e.g., 'competence', 'curriculum')
-        file_path: Path object to JSON file
+        domain (str):
+            Domaine des données :
+            - competence
+            - curriculum
+
+        source_name (str):
+            Source des données :
+            - Polytech
+            - autres futures sources
+
+        file_path (Path):
+            Chemin du fichier JSON brut.
     """
     file_name = file_path.name
-    source_name = file_name.split("_")[0]
     
     logger.info(f"Processing [{domain}] : {file_name}")
 
@@ -91,9 +135,7 @@ def process_file(domain, file_path):
         # OUTPUT FOLDER
         # ==========================================
 
-        output_folder = (
-            Path(PROCESSED_FOLDER) / domain
-        )
+        output_folder = Path(PROCESSED_FOLDER) / domain / source_name
 
         output_folder.mkdir(
             parents=True,
@@ -124,9 +166,7 @@ def process_file(domain, file_path):
         # ANALYTICS FOLDER
         # ==========================================
 
-        analytics_folder = (
-            Path(ANALYTICS_FOLDER) / domain
-        )
+        analytics_folder = Path(ANALYTICS_FOLDER) / domain / source_name
 
         analytics_folder.mkdir(
             parents=True,
@@ -177,10 +217,20 @@ def process_file(domain, file_path):
 # ==========================================
 
 def run_domain_pipeline(domain):
-    """Process all JSON files in a domain folder.
-    
+
+    """
+    Traiter tous les fichiers JSON d'un domaine.
+
+    Cette fonction :
+    - parcourt les dossiers sources,
+    - détecte les fichiers JSON,
+    - lance le traitement ETL de chaque fichier.
+
     Args:
-        domain: Domain name (folder in RAW_FOLDER)
+        domain (str):
+            Domaine des données :
+            - competence
+            - curriculum
     """
     domain_path = Path(RAW_FOLDER) / domain
     
@@ -190,18 +240,32 @@ def run_domain_pipeline(domain):
 
     logger.info(f"Starting pipeline for domain: {domain}")
     
-    json_files = list(domain_path.glob("*.json"))
-    
-    if not json_files:
-        logger.warning(f"No JSON files found in {domain_path}")
+    source_folders = [
+    path for path in domain_path.iterdir()
+    if path.is_dir()
+]
+
+    if not source_folders:
+        logger.warning(f"No source folders found in {domain_path}")
         return
 
-    for file_path in json_files:
-        try:
-            process_file(domain, file_path)
-        except Exception as e:
-            logger.error(f"Failed to process {file_path}: {e}")
-            continue
+    for source_path in source_folders:
+
+        source_name = source_path.name
+
+        json_files = list(source_path.glob("*.json"))
+
+        logger.info(
+            f"{len(json_files)} files found for "
+            f"{domain}/{source_name}"
+        )
+
+        for file_path in json_files:
+            try:
+                process_file(domain, source_name, file_path)
+            except Exception as e:
+                logger.error(f"Failed to process {file_path}: {e}")
+                continue
 
 
 # ==========================================
@@ -209,7 +273,15 @@ def run_domain_pipeline(domain):
 # ==========================================
 
 def run_pipeline():
-    """Run the complete ETL pipeline for all domains."""
+    """
+    Exécuter le pipeline ETL complet.
+
+    Cette fonction lance le traitement
+    de tous les domaines supportés :
+    - competence
+    - curriculum
+    """
+    
     logger.info("Starting main pipeline")
     
     # ==========================================

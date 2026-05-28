@@ -1,3 +1,19 @@
+"""
+JSON loader du pipeline ETL.
+
+Ce module est responsable de la sauvegarde
+des données transformées au format JSON.
+
+Le loader sérialise les modèles Pydantic
+vers des fichiers JSON lisibles et structurés.
+
+Fonctionnalités :
+- création automatique des dossiers,
+- sérialisation des modèles Pydantic,
+- gestion des erreurs d’écriture,
+- logging des opérations de sauvegarde.
+"""
+
 import json
 import logging
 from pathlib import Path
@@ -6,15 +22,31 @@ logger = logging.getLogger(__name__)
 
 
 def load_json(data, output_path):
-    """Save data to JSON file with error handling.
-    
+    """
+    Sauvegarder des données transformées
+    dans un fichier JSON.
+
+    Cette fonction :
+    - crée automatiquement les dossiers nécessaires,
+    - convertit les modèles Pydantic en dictionnaire,
+    - écrit le JSON formaté sur disque.
+
     Args:
-        data: Pydantic model instance to serialize
-        output_path: Path where JSON will be saved
-        
+        data:
+            Instance d’un modèle Pydantic
+            à sérialiser.
+
+        output_path (str):
+            Chemin du fichier JSON de sortie.
+
     Raises:
-        ValueError: If data is not a valid Pydantic model
-        IOError: If file cannot be written
+        ValueError:
+            Si l’objet fourni n’est pas
+            un modèle Pydantic valide.
+
+        IOError:
+            Si le fichier ne peut pas
+            être écrit sur disque.
     """
     output_path = Path(output_path)
     
