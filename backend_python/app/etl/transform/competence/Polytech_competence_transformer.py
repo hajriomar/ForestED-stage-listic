@@ -1,22 +1,5 @@
 """
 Transformer compétences pour les données Polytech.
-
-Ce module transforme les données brutes du référentiel de compétences
-vers deux représentations :
-
-1. Une représentation canonique respectant le méta-modèle compétences :
-   Référentiel -> Sous-classification -> Compétence ->
-   Niveau de développement -> Apprentissages critiques.
-
-2. Une représentation flat destinée aux usages analytics,
-   visualisation et BI.
-
-Le transformer applique aussi plusieurs règles métier :
-- regroupement des compétences,
-- regroupement des niveaux de développement,
-- détection des apprentissages critiques,
-- extraction automatique des codes modules depuis le texte,
-- normalisation des codes modules.
 """
 
 import logging
@@ -28,42 +11,21 @@ from app.models.competency_models import (
     NiveauDeveloppement,
     ApprentissageCritique,
     SousClassification,
+    ComposanteEssentielle,
 )
 
-from app.etl.transform.base_transformer import (
-    BaseTransformer
-)
+from app.etl.transform.base_transformer import BaseTransformer
 
 logger = logging.getLogger(__name__)
 
 
 class PolytechTransformer(BaseTransformer):
 
-    """
-    Transformer des référentiels compétences Polytech.
-
-    Cette classe transforme les données brutes compétences
-    vers :
-    - un modèle canonique respectant le méta-modèle,
-    - un format flat simplifié pour analytics.
-    """
-
     def transform(self, raw_data):
+        normalized_rows = self.normalize(raw_data)
 
-        """
-        Transformer les données compétences brutes.
-
-        Args:
-            raw_data (dict): Données JSON brutes.
-
-        Returns:
-            dict:
-                - canonical : modèle compétences structuré.
-                - flat : représentation plate analytics.
-        """
-
-        referentiel = transform_polytech_referentiel(
-            raw_data
+        referentiel = self.build_referentiel(
+            normalized_rows
         )
 
         flat_rows = self.flatten_referentiel(
@@ -75,218 +37,251 @@ class PolytechTransformer(BaseTransformer):
             "flat": flat_rows
         }
 
+    # =====================================================
+    # NORMALIZATION
+    # =====================================================
+
+    def normalize(self, raw_data):
+        if self.is_phpmyadmin_json(raw_data):
+            return self.normalize_phpmyadmin_json(raw_data)
+
+        if self.is_excel_data(raw_data):
+            return self.normalize_excel(raw_data)
+
+        if self.is_csv_data(raw_data):
+            return self.normalize_csv(raw_data)
+
+        raise ValueError("Structure Polytech competence non reconnue")
+
+    def is_phpmyadmin_json(self, raw_data):
+        return (
+            isinstance(raw_data, list)
+            and len(raw_data) > 2
+            and isinstance(raw_data[2], dict)
+            and "data" in raw_data[2]
+        )
+
+    def normalize_phpmyadmin_json(self, raw_data):
+        return raw_data[2]["data"]
+
+    def is_excel_data(self, raw_data):
+        return (
+            isinstance(raw_data, dict)
+            and "sheets" in raw_data
+        )
+
+    def normalize_excel(self, raw_data):
+        rows = []
+
+        for sheet in raw_data.get("sheets", []):
+            rows.extend(
+                sheet.get("rows", [])
+            )
+
+        return rows
+
+    def is_csv_data(self, raw_data):
+        return (
+            isinstance(raw_data, dict)
+            and "rows" in raw_data
+        )
+
+    def normalize_csv(self, raw_data):
+        return raw_data.get("rows", [])
+
+    # =====================================================
+    # BUILD CANONICAL MODEL
+    # =====================================================
+
+    def build_referentiel(self, rows):
+        competence_dict = {}
+
+        for row in rows:
+            if not row:
+                continue
+
+            comp_code = self.clean_value(
+                row.get("code_competence")
+            )
+
+            comp_nom = self.clean_value(
+                row.get("libelle_competence")
+            )
+
+            niveau_raw = self.clean_value(
+                row.get("niveau")
+            )
+
+            ac_id = self.clean_value(
+                row.get("id_apprentissage_critique")
+            )
+
+            ac_label = self.clean_value(
+                row.get("libelle_apprentissage")
+            )
+
+            if not comp_code or not comp_nom or not niveau_raw or not ac_id or not ac_label:
+                continue
+
+            try:
+                niveau = int(float(niveau_raw))
+            except ValueError:
+                logger.warning(
+                    f"Niveau invalide ignoré : {niveau_raw}"
+                )
+                continue
+
+            ac_code = f"{comp_code}_N{niveau}_AC{ac_id}"
+
+            parsed_modules = extract_modules_from_text(
+                ac_label
+            )
+
+            if comp_code not in competence_dict:
+                competence_dict[comp_code] = Competence(
+                    code=comp_code,
+                    nom=comp_nom,
+                    definition=row.get("description")
+                )
+
+            competence = competence_dict[comp_code]
+
+            ce_id = self.clean_value(
+                row.get("id_composante_essentielle")
+                )
+
+            ce_label = self.clean_value(
+            row.get("libelle_composante_essentielle")
+            )
+
+            if ce_id and ce_label:
+                ce_code = f"{comp_code}_CE{ce_id}"
+
+                existing_ce_codes = {
+                    ce.code
+                    for ce in competence.composantes_essentielles
+                }
+
+                if ce_code not in existing_ce_codes:
+                    competence.composantes_essentielles.append(
+                        ComposanteEssentielle(
+                            code=ce_code,
+                            formulation=ce_label
+                        )
+                    )
+
+            niveau_description = self.clean_value(
+            row.get("libelle_niveau")
+            )
+            
+            niveau_obj = self.get_or_create_niveau(
+                competence,
+                niveau,
+                niveau_description
+            )
+
+            ac_obj = self.get_or_create_ac(
+                niveau_obj,
+                ac_code,
+                ac_label
+            )
+
+            for module in parsed_modules:
+                if module not in ac_obj.modules:
+                    ac_obj.modules.append(module)
+
+        sous_classification = SousClassification(
+            code="Polytech",
+            nom="Polytech",
+            competences=list(competence_dict.values())
+        )
+
+        return ReferentielCompetences(
+            intitule="Référentiel de compétences Polytech",
+            sous_classifications=[sous_classification]
+        )
+
+    def get_or_create_niveau(self, competence, niveau, description=None):
+        for niveau_obj in competence.niveaux_developpement:
+            if niveau_obj.niveau == niveau:
+                if not niveau_obj.description and description:
+                    niveau_obj.description = description
+                return niveau_obj
+
+        niveau_obj = NiveauDeveloppement(
+            niveau=niveau,
+            description=description
+        )
+
+        competence.niveaux_developpement.append(
+            niveau_obj
+        )
+
+        return niveau_obj
+
+    def get_or_create_ac(self, niveau_obj, ac_code, ac_label):
+        for ac in niveau_obj.apprentissages_critiques:
+            if ac.code == ac_code:
+                return ac
+
+        ac_obj = ApprentissageCritique(
+            code=ac_code,
+            description=ac_label
+        )
+
+        niveau_obj.apprentissages_critiques.append(
+            ac_obj
+        )
+
+        return ac_obj
+
+    def clean_value(self, value):
+        if value is None:
+            return ""
+
+        return str(value).strip()
+
+    # =====================================================
+    # FLATTEN
+    # =====================================================
+
     def flatten_referentiel(self, referentiel):
-
-        """
-        Convertir un référentiel compétences en format plat.
-
-        Cette méthode simplifie la structure hiérarchique
-        du méta-modèle afin de faciliter :
-        - l'analyse,
-        - les exports,
-        - les visualisations,
-        - les traitements BI.
-
-        Args:
-            referentiel (ReferentielCompetences):
-                Référentiel structuré.
-
-        Returns:
-            list[dict]:
-                Liste de lignes plates analytics.
-        """
-
         rows = []
 
         for sous_classification in referentiel.sous_classifications:
-
             for competence in sous_classification.competences:
-
                 for niveau in competence.niveaux_developpement:
-
                     for ac in niveau.apprentissages_critiques:
-
-                        row = {
+                        rows.append({
+                            "referentiel": referentiel.intitule,
+                            "source": "Polytech",
                             "sous_classification_code": sous_classification.code,
                             "sous_classification_nom": sous_classification.nom,
-
                             "competence_code": competence.code,
                             "competence_nom": competence.nom,
-
                             "niveau": niveau.niveau,
-
+                            "niveau_description": niveau.description,
                             "ac_code": ac.code,
                             "ac_description": ac.description,
-
-                            "modules": ", ".join(
-                                ac.modules
-                            )
-                        }
-
-                        rows.append(row)
+                            "modules": ", ".join(ac.modules)
+                        })
 
         return rows
 
 
 def extract_modules_from_text(text):
-
-    """
-    Extraire automatiquement les codes modules
-    depuis le texte d'un apprentissage critique.
-
-    Cette fonction détecte les modules même
-    lorsqu'ils sont :
-    - entourés de texte,
-    - séparés par des virgules,
-    - suivis de suffixes comme _IDU,
-    - écrits avec espace avant les chiffres.
-
-    Exemples :
-        INFO734_IDU -> INFO734
-        SHES 901 -> SHES901
-
-    Args:
-        text (str): Texte contenant des références modules.
-
-    Returns:
-        list[str]:
-            Liste des codes modules normalisés.
-    """
-
-
     if not text:
         return []
 
     matches = re.findall(
-        r'\b[A-Z]{3,5}\s?\d{3}',
-        text
+        r"\b[A-Z]{3,5}\s?\d{3}",
+        str(text)
     )
 
     modules = []
 
     for match in matches:
-
-        normalized = match.replace(
-            " ",
-            ""
-        )
-
-        modules.append(
-            normalized
-        )
+        normalized = match.replace(" ", "")
+        modules.append(normalized)
 
     return list(dict.fromkeys(modules))
-
-
-def transform_polytech_referentiel(raw_data):
-
-    """
-    Construire le référentiel compétences canonique.
-
-    Cette fonction :
-    - regroupe les compétences,
-    - crée les niveaux de développement,
-    - crée les apprentissages critiques,
-    - extrait les modules associés,
-    - construit la structure complète du méta-modèle.
-
-    Args:
-        raw_data (dict): Données JSON brutes compétences.
-
-    Returns:
-        ReferentielCompetences:
-            Référentiel compétences structuré.
-    """
-
-    rows = raw_data[2]["data"]
-
-    competence_dict = {}
-
-    for row in rows:
-
-        comp_code = row["code_competence"]
-        comp_nom = row["libelle_competence"]
-        niveau = int(row["niveau"])
-
-        ac_code = (
-            f"{comp_code}_N{niveau}_AC"
-            f"{row['id_apprentissage_critique']}"
-        )
-
-        ac_label = row["libelle_apprentissage"]
-
-        parsed_modules = extract_modules_from_text(
-            ac_label
-        )
-
-        if comp_code not in competence_dict:
-
-            competence_dict[comp_code] = Competence(
-                code=comp_code,
-                nom=comp_nom,
-                definition=row.get("description")
-            )
-
-        competence = competence_dict[comp_code]
-
-        niveau_obj = None
-
-        for n in competence.niveaux_developpement:
-
-            if n.niveau == niveau:
-                niveau_obj = n
-                break
-
-        if niveau_obj is None:
-
-            niveau_obj = NiveauDeveloppement(
-                niveau=niveau
-            )
-
-            competence.niveaux_developpement.append(
-                niveau_obj
-            )
-
-        ac_obj = None
-
-        for ac in niveau_obj.apprentissages_critiques:
-
-            if ac.code == ac_code:
-                ac_obj = ac
-                break
-
-        if ac_obj is None:
-
-            ac_obj = ApprentissageCritique(
-                code=ac_code,
-                description=ac_label
-            )
-
-            niveau_obj.apprentissages_critiques.append(
-                ac_obj
-            )
-
-        for module in parsed_modules:
-
-            if module not in ac_obj.modules:
-
-                ac_obj.modules.append(
-                    module
-                )
-
-    sous_classification = SousClassification(
-        code="Polytech",
-        nom="Polytech",
-        competences=list(
-            competence_dict.values()
-        )
-    )
-
-    referentiel = ReferentielCompetences(
-        intitule="Référentiel de compétences Polytech",
-        sous_classifications=[
-            sous_classification
-        ]
-    )
-
-    return referentiel

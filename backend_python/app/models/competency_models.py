@@ -1,4 +1,5 @@
 """
+
 Méta-modèle compétences du projet ForestED.
 
 Ce module définit les structures de données canoniques
@@ -17,11 +18,11 @@ Référentiel
         -> Compétence
             -> Niveau de développement
                 -> Apprentissages critiques
+
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
-
+from typing import List, Optional ,Union
 
 class StrictBaseModel(BaseModel):
 
@@ -52,6 +53,7 @@ class ApprentissageCritique(StrictBaseModel):
     modules: List[str] = Field(default_factory=list)
 
 
+
 class NiveauDeveloppement(StrictBaseModel):
     """
     Représente un niveau de développement
@@ -62,6 +64,7 @@ class NiveauDeveloppement(StrictBaseModel):
     """
 
     niveau: int
+    description: Optional[str] = None
     apprentissages_critiques: List[ApprentissageCritique] = Field(default_factory=list)
 
 
@@ -100,6 +103,17 @@ class CompetenceAbstract(StrictBaseModel):
     nom: str
     definition: Optional[str] = None
 
+class CompetenceComposite(CompetenceAbstract):
+    """
+    Représente une compétence composée.
+
+    Elle permet de modéliser les référentiels où une compétence
+    générale est structurée en plusieurs compétences associées.
+    """
+
+    competences_associees: List["CompetenceAssociee"] = Field(
+        default_factory=list
+    )   
 
 class CompetenceAssociee(CompetenceAbstract):
     """
@@ -145,7 +159,9 @@ class SousClassification(StrictBaseModel):
 
     code: str
     nom: str
-    competences: List[Competence] = Field(default_factory=list)
+    competences: List[Union[Competence, CompetenceComposite]] = Field(
+        default_factory=list
+    )
 
 
 class ReferentielCompetences(StrictBaseModel):

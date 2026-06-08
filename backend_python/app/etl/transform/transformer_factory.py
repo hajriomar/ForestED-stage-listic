@@ -23,6 +23,11 @@ from app.etl.transform.competence.Polytech_competence_transformer import (
 from app.etl.transform.curriculum.Polytech_curriculum_transformer import (
     PolytechCurriculumTransformer
 )
+from app.etl.transform.curriculum.BUT_curriculum_transfomer import (
+    BUTCurriculumTransformer
+)
+
+from app.etl.transform.competence.BUT_competence_transformer import BUTCompetenceTransformer
 
 
 class TransformerFactory:
@@ -69,6 +74,8 @@ class TransformerFactory:
 
             if source_name == "Polytech":
                 return PolytechTransformer()
+            if source_name == "BUT":
+                return BUTCompetenceTransformer()
 
         # ==========================================
         # CURRICULUM
@@ -78,6 +85,8 @@ class TransformerFactory:
 
             if source_name == "Polytech":
                 return PolytechCurriculumTransformer()
+            if source_name == "BUT":
+                return BUTCurriculumTransformer()
 
         raise ValueError(
             f"No transformer for "

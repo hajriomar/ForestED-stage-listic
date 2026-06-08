@@ -24,12 +24,12 @@ services:
     container_name: forested_frontend
 
     volumes:
-      - ./front:/app
+      - ./front/app:/app
+      - ./backend_python/app/data:/data:ro
 
     ports:
       - "8050:8050"
 
     working_dir: /app
 
-    tty: true
-
+    command: python main.py

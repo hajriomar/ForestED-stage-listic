@@ -1,98 +1,131 @@
 #!/usr/bin/env python3
 """
-ForestED ETL Pipeline Runner
+ForestED ETL Pipeline Runner.
+
+CLI pour lancer le pipeline ETL :
+- complet
+- par domaine
+- par fichier
 """
+
 import sys
 import logging
 import argparse
 from pathlib import Path
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
 from app.etl.pipeline import (
     run_pipeline,
     run_domain_pipeline,
-    process_file
+    process_file,
 )
 
+DOMAINS = ["competence", "curriculum"]
 
-def main():
-    """Main entry point for pipeline runner."""
-    parser = argparse.ArgumentParser(
-        description="ForestED ETL Pipeline Runner"
+
+def setup_logging(verbose: bool = False) -> None:
+    """Configure les logs du pipeline."""
+    level = logging.DEBUG if verbose else logging.INFO
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
-    
-    subparsers = parser.add_subparsers(dest="command", help="Command to run")
-    
-    # Full pipeline command
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construit le CLI du pipeline."""
+    parser = argparse.ArgumentParser(
+        prog="run_pipeline.py",
+        description="ForestED ETL Pipeline Runner",
+    )
+
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Afficher les logs détaillés",
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        help="Commande à exécuter",
+    )
+
     subparsers.add_parser(
         "run",
-        help="Run full ETL pipeline for all domains"
+        help="Lancer le pipeline complet",
     )
-    
-    # Domain pipeline command
+
     domain_parser = subparsers.add_parser(
-        "domain",
-        help="Run ETL pipeline for a specific domain"
+        "run-domain",
+        help="Lancer le pipeline pour un domaine spécifique",
     )
     domain_parser.add_argument(
         "domain",
-        choices=["competence", "curriculum"],
-        help="Domain to process"
+        choices=DOMAINS,
+        help="Domaine à traiter",
     )
-    
-    # File pipeline command
+
     file_parser = subparsers.add_parser(
-        "file",
-        help="Process a single JSON file"
+        "run-file",
+        help="Traiter un seul fichier JSON",
     )
     file_parser.add_argument(
         "domain",
-        choices=["competence", "curriculum"],
-        help="Domain of the file"
+        choices=DOMAINS,
+        help="Domaine du fichier",
     )
     file_parser.add_argument(
         "file_path",
-        type=str,
-        help="Path to the JSON file"
+        type=Path,
+        help="Chemin vers le fichier JSON",
     )
-    
+
+    return parser
+
+
+def validate_file(file_path: Path) -> None:
+    """Vérifie que le fichier existe et qu'il est bien un JSON."""
+    if not file_path.exists():
+        raise FileNotFoundError(f"Fichier introuvable : {file_path}")
+
+    if not file_path.is_file():
+        raise ValueError(f"Le chemin n'est pas un fichier : {file_path}")
+
+    if file_path.suffix.lower() != ".json":
+        raise ValueError(f"Le fichier doit être au format JSON : {file_path}")
+
+
+def main() -> int:
+    """Point d'entrée principal du CLI."""
+    parser = build_parser()
     args = parser.parse_args()
-    
-    if not args.command:
-        parser.print_help()
-        return 1
-    
+
+    setup_logging(args.verbose)
+    logger = logging.getLogger("forested.cli")
+
     try:
         if args.command == "run":
-            logger.info("Starting full ETL pipeline")
+            logger.info("Lancement du pipeline ETL complet")
             run_pipeline()
-            logger.info("Pipeline completed successfully")
-            
-        elif args.command == "domain":
-            logger.info(f"Starting ETL pipeline for domain: {args.domain}")
+            logger.info("Pipeline ETL complet terminé avec succès")
+
+        elif args.command == "run-domain":
+            logger.info("Lancement du pipeline pour le domaine : %s", args.domain)
             run_domain_pipeline(args.domain)
-            logger.info(f"Pipeline for domain '{args.domain}' completed successfully")
-            
-        elif args.command == "file":
-            file_path = Path(args.file_path)
-            if not file_path.exists():
-                logger.error(f"File not found: {file_path}")
-                return 1
-            
-            logger.info(f"Processing file: {file_path}")
-            process_file(args.domain, file_path)
-            logger.info("File processed successfully")
-        
+            logger.info("Pipeline du domaine '%s' terminé avec succès", args.domain)
+
+        elif args.command == "run-file":
+            validate_file(args.file_path)
+            logger.info("Traitement du fichier : %s", args.file_path)
+            process_file(args.domain, args.file_path)
+            logger.info("Fichier traité avec succès")
+
         return 0
-        
-    except Exception as e:
-        logger.error(f"Pipeline failed: {e}", exc_info=True)
+
+    except Exception as exc:
+        logger.exception("Échec du pipeline : %s", exc)
         return 1
 
 

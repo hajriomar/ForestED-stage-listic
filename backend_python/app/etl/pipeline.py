@@ -29,17 +29,17 @@ import json
 import logging
 from pathlib import Path
 
-from app.etl.extract.json_extractor import (
-    extract_json
+from app.etl.extract.extractor_factory import ExtractorFactory
+
+from app.etl.transform.transformer_factory import (
+    TransformerFactory
 )
 
 from app.etl.load.json_loader import (
     load_json
 )
 
-from app.etl.transform.transformer_factory import (
-    TransformerFactory
-)
+
 
 # Configure logging
 logging.basicConfig(
@@ -102,9 +102,11 @@ def process_file(domain, source_name,file_path):
         # EXTRACT
         # ==========================================
 
-        raw_data = extract_json(
+        extractor = ExtractorFactory.get_extractor(file_path)
+
+        raw_data = extractor(
             str(file_path)
-        )
+            )
 
         # ==========================================
         # TRANSFORM
@@ -148,8 +150,8 @@ def process_file(domain, source_name,file_path):
 
         output_file = (
             output_folder /
-            f"{file_name.replace('.json', '_processed.json')}"
-        )
+            f"{file_path.stem}_processed.json"
+         )
 
         # ==========================================
         # SAVE CANONICAL
@@ -178,9 +180,9 @@ def process_file(domain, source_name,file_path):
         # ==========================================
 
         analytics_file = (
-            analytics_folder /
-            f"{file_name.replace('.json', '_flat.json')}"
-        )
+        analytics_folder /
+        f"{file_path.stem}_flat.json"
+         )
 
         # ==========================================
         # SAVE FLAT DATA
@@ -253,14 +255,24 @@ def run_domain_pipeline(domain):
 
         source_name = source_path.name
 
-        json_files = list(source_path.glob("*.json"))
+        files = []
+
+        files.extend(source_path.glob("*.json"))
+        files.extend(source_path.glob("*.xlsx"))
+        files.extend(source_path.glob("*.xls"))
+        files.extend(source_path.glob("*.csv"))
+        files = [
+        file_path
+         for file_path in files
+            if not file_path.name.startswith("~$")
+          ]
 
         logger.info(
-            f"{len(json_files)} files found for "
+            f"{len(files)} files found for "
             f"{domain}/{source_name}"
         )
 
-        for file_path in json_files:
+        for file_path in files:
             try:
                 process_file(domain, source_name, file_path)
             except Exception as e:
