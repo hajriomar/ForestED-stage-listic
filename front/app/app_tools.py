@@ -124,23 +124,70 @@ def fill_competence_stats(programme_summary, data):
     )
     programme_summary["niveaux"] = len(niveau_keys)
 
+def iter_curriculum_elements(programme):
+    """
+    Itère sur tous les éléments pédagogiques du curriculum.
+    Compatible ancien et nouveau méta-modèle.
+    """
+
+    for periode in programme.get("periodes", []):
+
+        # Ancien modèle
+        for ue in periode.get("unites_enseignement", []):
+            for element in ue.get("elements_pedagogiques", []):
+                yield {
+                    "periode": periode,
+                    "ue": ue,
+                    "option": None,
+                    "parcours": "COMMUN",
+                    "element": element,
+                }
+
+        # Nouveau modèle
+        for group in periode.get("groupes_elements_pedagogiques", []):
+
+            # UE élémentaire directe
+            if "elements_pedagogiques" in group:
+                for element in group.get("elements_pedagogiques", []):
+                    yield {
+                        "periode": periode,
+                        "ue": group,
+                        "option": None,
+                        "parcours": group.get("contrainte") or "COMMUN",
+                        "element": element,
+                    }
+
+            # UE composite avec options
+            elif "groupes_elements_pedagogiques" in group:
+                ue = group
+
+                for option in group.get("groupes_elements_pedagogiques", []):
+                    for element in option.get("elements_pedagogiques", []):
+                        yield {
+                            "periode": periode,
+                            "ue": ue,
+                            "option": option,
+                            "parcours": option.get("contrainte") or "COMMUN",
+                            "element": element,
+                        }
 
 def fill_curriculum_stats(programme_summary, data):
     ue_ids = set()
     module_ids = set()
 
-    for periode in data.get("periodes", []):
-        for ue in periode.get("unites_enseignement", []):
-            ue_id = ue.get("id")
+    for row in iter_curriculum_elements(data):
+        ue = row["ue"]
+        element = row["element"]
 
-            if ue_id:
-                ue_ids.add(ue_id)
+        ue_id = ue.get("id")
 
-            for element in ue.get("elements_pedagogiques", []):
-                module_id = element.get("id")
+        if ue_id:
+            ue_ids.add(ue_id)
 
-                if module_id:
-                    module_ids.add(module_id)
+        module_id = element.get("id")
+
+        if module_id:
+            module_ids.add(module_id)
 
     programme_summary["ue"] = len(ue_ids)
     programme_summary["modules"] = len(module_ids)

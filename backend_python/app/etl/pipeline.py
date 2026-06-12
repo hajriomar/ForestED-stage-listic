@@ -105,8 +105,15 @@ def process_file(domain, source_name,file_path):
         extractor = ExtractorFactory.get_extractor(file_path)
 
         raw_data = extractor(
-            str(file_path)
-            )
+        str(file_path)
+        )
+
+        # Injecter le nom de fichier pour tous les extracteurs.
+        # extract_excel l'injecte déjà ; extract_json ne le fait pas.
+        # Permet aux transformers de résoudre le programme_id automatiquement
+        # depuis le préfixe du fichier (ex: IDU_curriculum.json → POLYTECH_IDU).
+        if isinstance(raw_data, dict):
+            raw_data.setdefault("file_name", file_path.name)
 
         # ==========================================
         # TRANSFORM
@@ -292,10 +299,7 @@ def run_pipeline():
     de tous les domaines supportés :
     - competence
     - curriculum
-    """
-    
-    logger.info("Starting main pipeline")
-    
+    """    
     # ==========================================
     # COMPETENCE
     # ==========================================
@@ -317,6 +321,28 @@ def run_pipeline():
     )
 
 
-if __name__ == "__main__":
+def main():
+    import sys
+
+    logger.info("Starting main pipeline")
+
+    if len(sys.argv) == 5 and sys.argv[1] == "file":
+
+        domain = sys.argv[2]
+        source_name = sys.argv[3]
+        file_path = Path(sys.argv[4])
+
+        process_file(
+            domain,
+            source_name,
+            file_path
+        )
+
+        print("Traitement du fichier terminé.")
+        return
 
     run_pipeline()
+
+if __name__ == "__main__":
+
+    main()

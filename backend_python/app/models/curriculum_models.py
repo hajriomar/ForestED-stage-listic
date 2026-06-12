@@ -1,257 +1,222 @@
 """
 Méta-modèle curriculum du projet ForestED.
 
-Ce module définit les modèles Pydantic utilisés pour représenter
-la structure pédagogique d’un programme de formation.
-
-La hiérarchie principale est :
+Hiérarchie principale :
 
 Programme
-    -> PériodeProgramme
-        -> UniteEnseignement
-            -> ElementPedagogique
-                -> AcquisApprentissage
-                -> ActivitePedagogique
-                -> RessourcePedagogique
-                -> Evaluation
-                -> Enseignant
-
-Ces modèles servent de structure canonique après transformation
-des données brutes issues des fiches de cours.
+    -> PeriodeProgramme
+        -> GroupeElementsPedagogiques
+            -> GroupeElementsPedagogiquesComposite
+            -> GroupeElementsPedagogiquesElementaire
+                -> ElementPedagogique
+                    -> ElementPedagogiqueFormatif
+                    -> ElementPedagogiqueProfessionnel
+                    -> ElementPedagogiqueExterne
+                        -> AcquisApprentissage
+                        -> ActivitePedagogique
+                        -> RessourcePedagogique
+                        -> Evaluation
+                        -> Enseignant
 """
-from pydantic import BaseModel,Field, field_validator,model_validator,EmailStr
-from typing import List, Optional
+
+from abc import ABC
+from typing import List, Optional, Union
+
+from pydantic import (
+    BaseModel,
+    Field,
+    EmailStr,
+    field_validator,
+    model_validator,
+)
+
 
 class StrictBaseModel(BaseModel):
-
     model_config = {
         "extra": "forbid"
     }
 
 
-
 class RessourcePedagogique(StrictBaseModel):
-
-    """
-    Représente une ressource utilisée dans un enseignement.
-
-    Exemple : support de cours, livre, dataset, lien Moodle.
-    """
-
     id: str
-    titre: str
     type: Optional[str] = None
-
+    titre: str
 
 
 class ActivitePedagogique(StrictBaseModel):
-
-    
     id: str
-    titre: str
     type: Optional[str] = None
-
+    titre: str
 
 
 class Evaluation(StrictBaseModel):
-
     id: str
-    type: str
+    type: Optional[str] = None
     ponderation: Optional[float] = None
 
+    @field_validator("ponderation")
+    @classmethod
+    def validate_ponderation(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("Ponderation cannot be negative")
+
+        return v
+
+
+class AcquisApprentissageElementaire(StrictBaseModel):
+    id: str
+    description: str
 
 
 class AcquisApprentissage(StrictBaseModel):
-
-    """
-    Représente un acquis d’apprentissage attendu
-    à l’issue d’un élément pédagogique.
-    """
-
     id: str
     description: str
 
 
 class Enseignant(StrictBaseModel):
-    """
-    Représente un enseignant ou responsable pédagogique
-    associé à un élément pédagogique.
-    """
-
     id: str
-
     nom: str
-
     email: Optional[EmailStr] = None
-
     telephone: Optional[str] = None
-
     role: Optional[str] = None
 
 
-
-class ElementPedagogique(StrictBaseModel):
-
-    """
-    Représente un cours, module ou élément pédagogique.
-
-    Il contient les volumes horaires, les acquis,
-    les ressources, les évaluations et les enseignants.
-    """
-
+class ElementPedagogique(StrictBaseModel, ABC):
     id: str
     nom: str
-
     type: Optional[str] = None
+    credits: float = 0.0
+    volume_total: float = 0.0
 
-    ects: float = 0.0
+    acquis_apprentissage: List[AcquisApprentissage] = Field(default_factory=list)
+    enseignants: List[Enseignant] = Field(default_factory=list)
+    
+    @field_validator("credits", "volume_total")
+    @classmethod
+    def validate_positive_values(cls, v):
+        if v < 0:
+            raise ValueError("Credits and volume cannot be negative")
+
+        return v
+
+
+class ElementPedagogiqueFormatif(ElementPedagogique):
     cm: float = 0.0
     td: float = 0.0
     tp: float = 0.0
-    projet: float= 0.0
+    projet: float = 0.0
 
-    volume_total: float = 0.0
-
-    activites: List[ActivitePedagogique] = Field(default_factory=list)
     ressources: List[RessourcePedagogique] = Field(default_factory=list)
-    acquis: List[AcquisApprentissage] = Field(default_factory=list)
+    activites: List[ActivitePedagogique] = Field(default_factory=list)
     evaluations: List[Evaluation] = Field(default_factory=list)
-    enseignants: List[Enseignant] = Field(default_factory=list)
+    acquis_apprentissage_elementaires: List[AcquisApprentissageElementaire] = Field(
+        default_factory=list
+    )
 
     @field_validator("cm", "td", "tp", "projet")
     @classmethod
     def validate_hours(cls, v):
-
         if v < 0:
-            raise ValueError(
-                "Hours cannot be negative"
-            )
+            raise ValueError("Hours cannot be negative")
 
         return v
-    
-    @field_validator("ects")
-    @classmethod
-    def validate_ects(cls, v):
 
-        if v < 0:
-            raise ValueError(
-                "ECTS cannot be negative"
-            )
-
-        return v
-    
     @model_validator(mode="after")
     def compute_total(self):
-
         self.volume_total = (
-        self.cm +
-        self.td +
-        self.tp +
-        self.projet
+            self.cm
+            + self.td
+            + self.tp
+            + self.projet
         )
 
         return self
 
 
+class ElementPedagogiqueProfessionnel(ElementPedagogique):
+    duree: float = 0.0
+    modalite: Optional[str] = None
 
-class UniteEnseignement(StrictBaseModel):
+    @field_validator("duree")
+    @classmethod
+    def validate_duree(cls, v):
+        if v < 0:
+            raise ValueError("Duration cannot be negative")
 
-    """
-    Représente une unité d’enseignement.
+        return v
 
-    Une UE regroupe un ou plusieurs éléments pédagogiques.
-    """
 
+class ElementPedagogiqueExterne(ElementPedagogique):
+    source: Optional[str] = None
+    organisme: Optional[str] = None
+
+
+
+class GroupeElementsPedagogiques(StrictBaseModel, ABC):
     id: str
     code: str
     intitule: str
-
-    ects: float = 0.0
+    credits: float = 0.0
     type: Optional[str] = None
+    contrainte: Optional[str] = None
 
-    elements_pedagogiques: List[ElementPedagogique] = Field(default_factory=list)
-
-    @field_validator("ects")
+    @field_validator("credits")
     @classmethod
-    def validate_ects(cls, v):
-
+    def validate_credits(cls, v):
         if v < 0:
-            raise ValueError(
-                "ECTS cannot be negative"
-            )
+            raise ValueError("Credits cannot be negative")
 
         return v
 
 
+class GroupeElementsPedagogiquesElementaire(
+    GroupeElementsPedagogiques
+):
+    elements_pedagogiques: List[Union[ElementPedagogiqueFormatif,
+    ElementPedagogiqueProfessionnel,
+    ElementPedagogiqueExterne,]] = Field(
+        default_factory=list
+    )
 
-class Stage(StrictBaseModel):
 
-    id: str
+class GroupeElementsPedagogiquesComposite(
+    GroupeElementsPedagogiques
+):
+    groupes_elements_pedagogiques: List[
+        Union[
+            GroupeElementsPedagogiquesElementaire,
+            "GroupeElementsPedagogiquesComposite",
+        ]
+    ] = Field(default_factory=list)
 
-    type: Optional[str] = None
-    duree: float = 0.0
-    ects: float = 0.0
 
-    @field_validator("ects", "duree")
-    @classmethod
-    def validate_positive_values(cls, v):
-
-        if v < 0:
-            raise ValueError(
-                "ECTS and duration cannot be negative"
-            )
-
-        return v
 
 
 
 class PeriodeProgramme(StrictBaseModel):
-
-    """
-    Représente une période pédagogique du programme.
-
-    Elle correspond généralement à un semestre,
-    mais peut aussi représenter une période spéciale
-    comme TRANSVERSE pour les modules non rattachés
-    à un semestre précis.
-    """
-
     id: str
-
     numero: int
     ects: float = 0.0
 
-    unites_enseignement: List[UniteEnseignement] = Field(default_factory=list)
-    stages: List[Stage] = Field(default_factory=list)
+    groupes_elements_pedagogiques: List[Union[GroupeElementsPedagogiquesElementaire,
+    GroupeElementsPedagogiquesComposite,]] = Field(
+        default_factory=list
+    )
 
     @field_validator("ects")
     @classmethod
     def validate_ects(cls, v):
-
         if v < 0:
-            raise ValueError(
-                "ECTS cannot be negative"
-            )
+            raise ValueError("ECTS cannot be negative")
 
         return v
 
 
-
 class Programme(StrictBaseModel):
-    """
-    Représente un programme de formation complet.
-
-    Exemple : IDU, BUT Informatique ou autre parcours.
-    Il contient les périodes pédagogiques du programme.
-    """
-
     id: str
-
     nom: str
     type: Optional[str] = None
-
     niveau: Optional[str] = None
-    
     ects_total: float = 0.0
     duree: int = 0
 
@@ -260,11 +225,7 @@ class Programme(StrictBaseModel):
     @field_validator("ects_total", "duree")
     @classmethod
     def validate_positive_values(cls, v):
-
         if v < 0:
-            raise ValueError(
-                "ECTS and duration cannot be negative"
-            )
+            raise ValueError("ECTS and duration cannot be negative")
 
         return v
-

@@ -1,94 +1,58 @@
 """
 Factory des transformers ETL.
 
-Ce module implémente le Factory Pattern afin de sélectionner
-automatiquement le transformer adapté selon :
+Sélectionne automatiquement le transformer adapté selon :
+- le domaine  : competence / curriculum
+- la source   : polytech / but / futures sources
 
-- le domaine de données :
-    - competence
-    - curriculum
+Important :
+Les imports sont faits à l'intérieur de get_transformer pour éviter
+qu'un transformer cassé bloque les autres transformers.
 
-- la source des données :
-    - Polytech
-    - futures sources (BUT, autres écoles, etc.)
-
-Cette architecture permet d'ajouter facilement de nouvelles
-sources sans modifier le pipeline principal.
+Identité du programme BUT :
+    Extraite automatiquement depuis le nom de fichier source.
+    Convention : QLIO_BUT_*.xlsx → programme_id="BUT_QLIO"
+    Le pipeline injecte "source_file" dans raw_data pour permettre
+    cette résolution automatique.
 """
-
-from app.etl.transform.competence.Polytech_competence_transformer import (
-    PolytechTransformer
-)
-
-from app.etl.transform.curriculum.Polytech_curriculum_transformer import (
-    PolytechCurriculumTransformer
-)
-from app.etl.transform.curriculum.BUT_curriculum_transfomer import (
-    BUTCurriculumTransformer
-)
-
-from app.etl.transform.competence.BUT_competence_transformer import BUTCompetenceTransformer
 
 
 class TransformerFactory:
 
-    """
-    Factory responsable de la sélection des transformers.
-
-    Cette classe centralise la logique de choix des transformers
-    selon le domaine et la source des données.
-    """
-
     @staticmethod
     def get_transformer(domain, source_name):
 
-        """
-        Retourner le transformer adapté.
-
-        Args:
-            domain (str):
-                Domaine des données :
-                - competence
-                - curriculum
-
-            source_name (str):
-                Source des données :
-                - Polytech
-                - autres futures sources
-
-        Returns:
-            BaseTransformer:
-                Instance du transformer correspondant.
-
-        Raises:
-            ValueError:
-                Si aucun transformer n'existe
-                pour le domaine/source demandé.
-        """
-        
-        # ==========================================
-        # COMPETENCE
-        # ==========================================
+        domain = domain.strip().lower()
+        source_name = source_name.strip().lower()
 
         if domain == "competence":
 
-            if source_name == "Polytech":
+            if source_name == "polytech":
+                from app.etl.transform.competence.Polytech_competence_transformer import (
+                    PolytechTransformer,
+                )
                 return PolytechTransformer()
-            if source_name == "BUT":
-                return BUTCompetenceTransformer()
 
-        # ==========================================
-        # CURRICULUM
-        # ==========================================
+            if source_name == "but":
+                from app.etl.transform.competence.BUT_competence_transformer import (
+                    BUTCompetenceTransformer,
+                )
+                return BUTCompetenceTransformer()
 
         if domain == "curriculum":
 
-            if source_name == "Polytech":
+            if source_name == "polytech":
+                from app.etl.transform.curriculum.Polytech_curriculum_transformer import (
+                    PolytechCurriculumTransformer,
+                )
                 return PolytechCurriculumTransformer()
-            if source_name == "BUT":
+
+            if source_name == "but":
+                from app.etl.transform.curriculum.BUT_curriculum_transformer import (
+                    BUTCurriculumTransformer,
+                )
                 return BUTCurriculumTransformer()
 
         raise ValueError(
-            f"No transformer for "
-            f"{domain}/{source_name}"
+            f"No transformer for {domain}/{source_name}"
         )

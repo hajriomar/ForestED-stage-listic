@@ -10,7 +10,10 @@ from forested_visualisations import (
     forested_visualisations_layout,
     register_callbacks as register_visualisations_callbacks
 )
-
+from forested_forest import (
+    forested_forest_layout,
+    register_callbacks as register_forest_callbacks
+)
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
@@ -25,7 +28,12 @@ PAGES = {
         "label": "Visualisations",
         "layout": forested_visualisations_layout,
         "register": register_visualisations_callbacks
-    }
+    },
+    "forested": {
+    "label": "ForestED",
+    "layout": forested_forest_layout,
+    "register": register_forest_callbacks
+},
 }
 
 app.layout = html.Div([
