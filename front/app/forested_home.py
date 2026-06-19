@@ -3,7 +3,8 @@ from dash import html
 from app_tools import (
     load_processed_files,
     build_programmes_summary,
-    compute_global_stats
+    compute_global_stats,
+    count_competence_modules
 )
 
 
@@ -81,7 +82,8 @@ def programme_card(item):
         html.Div([
             html.Div(f"Compétences : {item['competences']}"),
             html.Div(f"AC : {item['ac']}"),
-            html.Div(f"Modules : {item['modules']}"),
+            html.Div(f"Modules liés aux compétences : {item['modules']}"),
+            html.Div(f"Éléments pédagogiques extraits : {item['elements_pedagogiques']}"),
             html.Div(f"UE : {item['ue']}"),
         ], style={
             "lineHeight": "1.8",

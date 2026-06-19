@@ -59,8 +59,9 @@ def build_programmes_summary(datasets):
                     "has_competence": False,
                     "has_curriculum": False,
                     "competences": 0,
-                    "ac": 0,
                     "modules": 0,
+                    "modules_lies_competences": 0,
+                    "elements_pedagogiques": 0,     
                     "ue": 0,
                     "sous_classifications": 0,
                     "niveaux": 0,
@@ -83,7 +84,29 @@ def build_programmes_summary(datasets):
                 )
 
     return list(programmes.values())
+def count_competence_modules(competence_data):
+    """
+    Compte les éléments pédagogiques réellement liés aux apprentissages critiques.
 
+    Polytech : ac["modules"]
+    BUT      : ac["ressources"] + ac["saes"]
+    """
+    modules = set()
+
+    if not competence_data:
+        return 0
+
+    for sous_classification in competence_data.get("sous_classifications", []):
+        for competence in sous_classification.get("competences", []):
+            for niveau in competence.get("niveaux_developpement", []):
+                for ac in niveau.get("apprentissages_critiques", []):
+
+                    for field in ["modules", "ressources", "saes"]:
+                        for module in ac.get(field, []):
+                            if module:
+                                modules.add(str(module).strip())
+
+    return len(modules)
 
 def fill_competence_stats(programme_summary, data):
     competence_codes = set()
@@ -116,6 +139,7 @@ def fill_competence_stats(programme_summary, data):
 
                     if ac_code:
                         ac_codes.add(ac_code)
+        
 
     programme_summary["competences"] = len(competence_codes)
     programme_summary["ac"] = len(ac_codes)
@@ -123,6 +147,10 @@ def fill_competence_stats(programme_summary, data):
         sous_classification_codes
     )
     programme_summary["niveaux"] = len(niveau_keys)
+    programme_summary["modules_lies_competences"] = count_competence_modules(data)
+
+    if programme_summary["modules_lies_competences"] > 0:
+        programme_summary["modules"] = programme_summary["modules_lies_competences"]
 
 def iter_curriculum_elements(programme):
     """
@@ -190,7 +218,10 @@ def fill_curriculum_stats(programme_summary, data):
             module_ids.add(module_id)
 
     programme_summary["ue"] = len(ue_ids)
-    programme_summary["modules"] = len(module_ids)
+    programme_summary["elements_pedagogiques"] = len(module_ids)
+
+    if programme_summary.get("modules_lies_competences", 0) == 0:
+        programme_summary["modules"] = len(module_ids)
 
 
 def compute_global_stats(programmes):

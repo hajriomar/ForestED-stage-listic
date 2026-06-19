@@ -14,7 +14,10 @@ from forested_forest import (
     forested_forest_layout,
     register_callbacks as register_forest_callbacks
 )
-
+from forested_sunburst import (
+    forested_sunburst_layout,
+    register_callbacks as register_sunburst_callbacks
+)
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 PAGES = {
@@ -33,6 +36,11 @@ PAGES = {
     "label": "ForestED",
     "layout": forested_forest_layout,
     "register": register_forest_callbacks
+},
+"sunburst": {
+    "label": "Sunburst APC",
+    "layout": forested_sunburst_layout,
+    "register": register_sunburst_callbacks
 },
 }
 
@@ -70,4 +78,10 @@ def render_page(pathname):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050, debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=8050,
+        debug=False,
+        use_reloader=False,
+        threaded=True
+    )

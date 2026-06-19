@@ -1,4 +1,29 @@
-from dash import html, dcc, Input, Output, State
+"""
+forested_forest.py — ForestED : Forêt pédagogique APC
+═══════════════════════════════════════════════════════
+
+Hiérarchie visuelle (bas → haut) :
+
+    ████ ███ █████  ← BARRES AC  (hauteur ∝ nb modules, colorées par niveau)
+      │   │    │
+    [N1] [N2] [N3]  ← NŒUDS NIVEAU  (carrés colorés, espacés horizontalement)
+         │
+        ◆           ← RACINE COMPÉTENCE  (losange bleu)
+
+Interaction :
+  - Clic sur une barre → panneau détail (AC + modules)
+  - Clic sur un niveau → panneau détail (tous les AC du niveau)
+  - Clic sur la racine → panneau détail (toute la compétence)
+  - Double-clic ou re-clic → reset focus
+  - Bouton Réinitialiser → reset
+
+Sources :
+  - Polytech : référentiel + curriculum → build_visualisation_rows
+  - BUT       : curriculum seul          → build_rows_from_curriculum
+"""
+
+import re
+from dash import html, dcc, Input, Output, State, ctx
 import plotly.graph_objects as go
 
 from app_tools import load_processed_files, build_programmes_summary
@@ -8,1383 +33,1327 @@ from forested_visualisations import (
     empty_figure,
 )
 
+try:
+    from forested_visualisations import normalize_module_code, iter_curriculum_elements
+    _HAS_HELPERS = True
+except Exception:
+    _HAS_HELPERS = False
+
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DESIGN TOKENS
+#  DESIGN TOKENS
 # ══════════════════════════════════════════════════════════════════════════════
 
 PAGE_STYLE = {
-    "backgroundColor": "#F8FAFB",
-    "minHeight": "100vh",
+    "backgroundColor": "#F8FAFB", "minHeight": "100vh",
     "padding": "28px 36px",
     "fontFamily": "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
 }
-
 CARD_STYLE = {
-    "backgroundColor": "#FFFFFF",
-    "padding": "18px 24px",
+    "backgroundColor": "#FFFFFF", "padding": "18px 24px",
     "borderRadius": "12px",
     "boxShadow": "0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
-    "marginBottom": "16px",
-    "border": "1px solid #E4E9F0",
+    "marginBottom": "16px", "border": "1px solid #E4E9F0",
 }
-
 LABEL_STYLE = {
-    "color": "#5A6478",
-    "fontWeight": "700",
-    "fontSize": "10px",
-    "letterSpacing": "1px",
-    "textTransform": "uppercase",
-    "marginBottom": "7px",
-    "display": "block",
+    "color": "#5A6478", "fontWeight": "700", "fontSize": "10px",
+    "letterSpacing": "1px", "textTransform": "uppercase",
+    "marginBottom": "7px", "display": "block",
 }
 
-COLOR_COMPETENCE = "#1E40AF"
-COLOR_COMP_BORDER = "#93C5FD"
-
-COLOR_LEVEL = "#64748B"
-COLOR_LEVEL_BORDER = "#CBD5E1"
-
-COLOR_MODULE = "#059669"
-COLOR_MODULE_BORDER = "#34D399"
-
-NIVEAU_COLORS = {
-    "1": "#10B981",
-    "2": "#F59E0B",
-    "3": "#EF4444",
-}
-
-FADE_NODE = "rgba(203,213,225,0.35)"
-FADE_LINE = "rgba(203,213,225,0.14)"
-
-LINE_COMP_LEVEL = "rgba(30,64,175,0.45)"
-LINE_LEVEL_AC = "rgba(100,116,139,0.36)"
-LINE_AC_MODULE = "rgba(5,150,105,0.28)"
+C_WOOD    = "#92766A"
+FADE      = "rgba(203,213,225,0.35)"
+FADE_LINE = "rgba(203,213,225,0.15)"
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# PARAMÈTRES DE LAYOUT
-# ══════════════════════════════════════════════════════════════════════════════
+# ── Deux palettes séparées : essentielles et optionnelles ─────────────────────
+# Les optionnelles ont leur propre set de couleurs distinctes des essentielles.
+# Visuellement : fill très pâle + contour en tirets (symbol tiret dans Plotly).
 
-Y_COMP = 0.0
-Y_LEVEL = 3.1
-Y_AC = 6.0
-Y_MODULE = 9.2
-Y_SEMESTER = -1.6
+# Palette essentielles : couleurs saturées, bien différenciées
+PALETTE_ESS = [
+    {   # 0 — purple
+        "n1_fill":"#EEEDFE","n1_border":"#CECBF6","n1_text":"#3C3489",
+        "n2_fill":"#AFA9EC","n2_text":"#26215C",
+        "n3_fill":"#534AB7","n3_text":"#EEEDFE",
+        "root_fill":"#3C3489","root_text":"#EEEDFE","line":"#3C3489",
+    },
+    {   # 1 — teal
+        "n1_fill":"#E1F5EE","n1_border":"#9FE1CB","n1_text":"#085041",
+        "n2_fill":"#5DCAA5","n2_text":"#04342C",
+        "n3_fill":"#0F6E56","n3_text":"#E1F5EE",
+        "root_fill":"#085041","root_text":"#E1F5EE","line":"#085041",
+    },
+    {   # 2 — coral
+        "n1_fill":"#FAECE7","n1_border":"#F5C4B3","n1_text":"#712B13",
+        "n2_fill":"#F0997B","n2_text":"#4A1B0C",
+        "n3_fill":"#993C1D","n3_text":"#FAECE7",
+        "root_fill":"#712B13","root_text":"#FAECE7","line":"#712B13",
+    },
+    {   # 3 — blue
+        "n1_fill":"#E6F1FB","n1_border":"#B5D4F4","n1_text":"#0C447C",
+        "n2_fill":"#85B7EB","n2_text":"#042C53",
+        "n3_fill":"#185FA5","n3_text":"#E6F1FB",
+        "root_fill":"#0C447C","root_text":"#E6F1FB","line":"#0C447C",
+    },
+    {   # 4 — amber
+        "n1_fill":"#FAEEDA","n1_border":"#FAC775","n1_text":"#633806",
+        "n2_fill":"#EF9F27","n2_text":"#412402",
+        "n3_fill":"#854F0B","n3_text":"#FAEEDA",
+        "root_fill":"#633806","root_text":"#FAEEDA","line":"#633806",
+    },
+    {   # 5 — green
+        "n1_fill":"#EAF3DE","n1_border":"#C0DD97","n1_text":"#27500A",
+        "n2_fill":"#97C459","n2_text":"#173404",
+        "n3_fill":"#3B6D11","n3_text":"#EAF3DE",
+        "root_fill":"#27500A","root_text":"#EAF3DE","line":"#27500A",
+    },
+    {   # 6 — pink
+        "n1_fill":"#FBEAF0","n1_border":"#F4C0D1","n1_text":"#72243E",
+        "n2_fill":"#ED93B1","n2_text":"#4B1528",
+        "n3_fill":"#993556","n3_text":"#FBEAF0",
+        "root_fill":"#72243E","root_text":"#FBEAF0","line":"#72243E",
+    },
+    {   # 7 — gray
+        "n1_fill":"#F1EFE8","n1_border":"#D3D1C7","n1_text":"#444441",
+        "n2_fill":"#B4B2A9","n2_text":"#2C2C2A",
+        "n3_fill":"#5F5E5A","n3_text":"#F1EFE8",
+        "root_fill":"#444441","root_text":"#F1EFE8","line":"#444441",
+    },
+]
 
-COMP_GAP = 7.5
-LEVEL_GAP = 3.0
-AC_GAP = 1.25
-MODULE_GAP = 0.62
+# Palette optionnelles : les tirets sont le différenciateur PRINCIPAL.
+# Les couleurs sont choisies pour minimiser la confusion avec les essentielles.
+# Règle : éviter la même hue qu'une essentielle dans la même formation.
+# En pratique, une formation a max 3-4 essentielles + max 5 optionnelles
+# → les 8 stops couvrent largement sans conflit dans un contexte réel.
+PALETTE_OPT = [
+    {   # 0 opt — violet (hue 270°, décalé de purple 250°)
+        "fill":"rgba(0,0,0,0)","border":"#7C3AED","text":"#4C1D95","line":"#7C3AED",
+    },
+    {   # 1 opt — cyan foncé (hue 190°, décalé de teal 160°)
+        "fill":"rgba(0,0,0,0)","border":"#0E7490","text":"#164E63","line":"#0E7490",
+    },
+    {   # 2 opt — orange vif (hue 25°, décalé de coral 10° et amber 42°)
+        "fill":"rgba(0,0,0,0)","border":"#C2410C","text":"#7C2D12","line":"#C2410C",
+    },
+    {   # 3 opt — bleu roi (hue 245°, décalé de blue 220°)
+        "fill":"rgba(0,0,0,0)","border":"#3730A3","text":"#1E1B4B","line":"#3730A3",
+    },
+    {   # 4 opt — vert sauge (hue 145°, décalé de green 110°)
+        "fill":"rgba(0,0,0,0)","border":"#047857","text":"#064E3B","line":"#047857",
+    },
+    {   # 5 opt — magenta (hue 310°, décalé de pink 340°)
+        "fill":"rgba(0,0,0,0)","border":"#A21CAF","text":"#701A75","line":"#A21CAF",
+    },
+    {   # 6 opt — brun (hue 30°, décalé de coral 10° et amber 42°)
+        "fill":"rgba(0,0,0,0)","border":"#92400E","text":"#451A03","line":"#92400E",
+    },
+    {   # 7 opt — acier (hue 210°, décalé de gray 0° et blue 220°)
+        "fill":"rgba(0,0,0,0)","border":"#1E40AF","text":"#1E3A5F","line":"#1E40AF",
+    },
+]
 
-MIN_AC_WIDTH = 1.6
-MIN_LEVEL_WIDTH = 3.0
-MIN_TREE_WIDTH = 7.0
+# Index séparés : on compte essentielles et optionnelles indépendamment
+# pour éviter tout conflit de couleur entre les deux familles.
 
-MAX_MODULES_DEFAULT = 6
+COMP_PALETTE = PALETTE_ESS   # conservé pour compat légende
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# HELPERS GÉNÉRAUX
-# ══════════════════════════════════════════════════════════════════════════════
+def _comp_scheme(index):
+    """
+    Retourne le schéma couleur d'une compétence — toujours la palette
+    essentielle pleine, dégradé N1→N2→N3, identique pour toutes les
+    compétences (BUT comme Polytech).
+    """
+    cfg = PALETTE_ESS[index % len(PALETTE_ESS)]
+    return {
+        "n1":   (cfg["n1_fill"], cfg["n1_text"], cfg["n1_border"]),
+        "n2":   (cfg["n2_fill"], cfg["n2_text"], cfg["n2_fill"]),
+        "n3":   (cfg["n3_fill"], cfg["n3_text"], cfg["n3_fill"]),
+        "root": (cfg["root_fill"], cfg["root_text"], cfg["root_fill"]),
+        "line": cfg["line"],
+    }
 
-def sort_semester(value):
+
+def _niv_key(niv):
+    return {1:"n1",2:"n2",3:"n3"}.get(
+        int(niv) if str(niv).isdigit() else 99, "n3")
+
+
+def _sort_sem(s):
     try:
-        return int(str(value).replace("S", ""))
+        return int(str(s).replace("S","").replace("s",""))
     except Exception:
         return 999
 
 
-def semester_label(value):
-    if value is None:
-        return "S?"
-    text = str(value).strip()
-    if text.upper().startswith("S"):
-        return text.upper()
-    return f"S{text}"
+# ══════════════════════════════════════════════════════════════════════════════
+#  LAYOUT CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════════
 
+Y_COMP      = 0.0   # racine
+Y_NIV       = 2.5   # nœuds niveau
+Y_BAR_BASE  = 3.5   # pied des barres AC
+BAR_MAX_H   = 4.0   # hauteur max d'une barre (pour max_mods_global)
 
-def normalize_level(value):
-    if value is None:
-        return "N?"
-    text = str(value).strip().upper()
-    if text.startswith("N"):
-        return text
-    return f"N{text}"
-
-
-def level_number(value):
-    text = str(value).upper().replace("N", "")
-    try:
-        return int(text)
-    except Exception:
-        return 99
-
-
-def level_color(value):
-    number = str(value).upper().replace("N", "")
-    return NIVEAU_COLORS.get(number, "#94A3B8")
-
-
-def level_label(value):
-    labels = {
-        "1": "Débutant",
-        "2": "Intermédiaire",
-        "3": "Avancé",
-    }
-    number = str(value).upper().replace("N", "")
-    return labels.get(number, "Niveau")
-
-
-def hex_to_rgb(hex_color):
-    value = hex_color.lstrip("#")
-
-    if len(value) != 6:
-        return "100,100,100"
-
-    r = int(value[0:2], 16)
-    g = int(value[2:4], 16)
-    b = int(value[4:6], 16)
-
-    return f"{r},{g},{b}"
-
-
-def get_programme_options():
-    datasets = load_processed_files()
-    programmes = build_programmes_summary(datasets)
-
-    return [
-        {
-            "label": f"{item['source']} — {item['programme']}",
-            "value": f"{item['source']}::{item['programme']}",
-        }
-        for item in programmes
-    ]
-
-
-programme_options = get_programme_options()
-default_programme = programme_options[0]["value"] if programme_options else None
+BAR_W       = 0.28  # largeur d'une barre (unités Plotly)
+BAR_GAP     = 0.10  # gap entre barres d'un même niveau
+NIV_GAP     = 0.65  # gap entre groupes de niveaux (horizontal)
+COMP_GAP    = 2.8   # gap entre arbres
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# NORMALISATION DES LIGNES
+#  SOURCE BUT
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _ue_to_comp(ue_code, parcours=None):
+    m = re.search(r"UE_\d+_(\d+)", str(ue_code))
+    if not m:
+        return None
+    n = m.group(1)
+    if parcours and parcours not in ("COMMUN", "", None):
+        return f"COMP_{parcours}_{n}"
+    return f"COMP_{n}"
+
+
+def _is_common_parcours(parcours):
+    return parcours in (None, "", "COMMUN", "TRONC_COMMUN", "Tronc commun")
+
+
+def _sem_to_niveau(sem):
+    try:
+        s = int(str(sem))
+    except Exception:
+        return 1
+    return 1 if s <= 2 else 2 if s <= 4 else 3
+
+
+def build_rows_from_curriculum(curriculum_data):
+    if not curriculum_data or not _HAS_HELPERS:
+        return []
+    ac_reg = {}
+
+    def _ac(cc, desc):
+        k = (cc, desc[:60])
+        if k not in ac_reg:
+            ac_reg[k] = f"{cc}_AC{len(ac_reg)+1:03d}"
+        return ac_reg[k]
+
+    rows = []
+    for rc in iter_curriculum_elements(curriculum_data):
+        sem, ue, parcours, el = rc["semestre"], rc["ue"], rc["parcours"], rc["element"]
+        cc = _ue_to_comp(ue.get("code", ""), parcours if parcours != "COMMUN" else None)
+        if not cc:
+            continue
+        mc = normalize_module_code(el.get("code") or el.get("id"))
+        if not mc:
+            continue
+        niv = _sem_to_niveau(sem)
+        ue_type = ue.get("type")  # UE_COMMUNE ou UE_OPTIONNELLE
+        parcours_val = parcours if parcours and parcours != "COMMUN" else None
+        for aa in el.get("acquis_apprentissage", []):
+            desc = (aa.get("description") or "").strip()
+            if not desc:
+                continue
+            rows.append({
+                "competence_code": cc,
+                "competence_name": f"Compétence {cc.replace('COMP_', '')}",
+                "ac_code": _ac(cc, desc), "ac_description": desc,
+                "niveau": niv, "module_code": mc,
+                "module_name": el.get("nom", ""), "semestre": sem,
+                "ue_type":  ue_type,
+                "parcours": parcours_val,
+            })
+    return rows
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  NORMALISATION ROWS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_forest_rows(rows):
-    """
-    Transforme les rows du graphe relationnel en rows dédiées à ForestED.
-
-    Structure cible :
-    semestre -> compétence -> niveau -> AC -> modules
-    """
-
     result = []
-
     for r in rows:
-        competence_code = r.get("competence_code")
-        ac_code = r.get("ac_code")
-        module_code = r.get("module_code") or r.get("module_id")
-
-        if not competence_code or not ac_code:
+        cc  = r.get("competence_code")
+        ac  = r.get("ac_code")
+        mc  = r.get("module_code") or r.get("module_id")
+        if not cc or not ac:
             continue
-
+        try:
+            niv = int(r.get("niveau") or 1)
+        except Exception:
+            niv = 1
+        sem     = r.get("semestre")
+        sem_lbl = f"S{sem}" if sem and not str(sem).startswith("S") else str(sem or "?")
         result.append({
-            "semestre": semester_label(r.get("semestre")),
-            "competence_code": competence_code,
-            "competence_name": r.get("competence_name") or competence_code,
+            "semestre":        sem_lbl,
+            "competence_code": cc,
+            "competence_name": r.get("competence_name") or cc,
+            "niveau":          niv,
+            "ac_code":         ac,
+            "ac_description":  r.get("ac_description") or "",
+            "module_code":     mc,
+            "module_name":     r.get("module_name") or mc or "",
+            "orphan":          r.get("orphan", False),
 
-            "niveau": normalize_level(r.get("niveau")),
+            "ue_type":         r.get("ue_type"),
+            "parcours":        r.get("parcours"),
 
-            "ac_code": ac_code,
-            "ac_description": r.get("ac_description") or "",
-
-            "module_key": module_code,
-            "module_id": r.get("module_id") or module_code,
-            "module_code": module_code,
-            "module_name": r.get("module_name") or module_code,
-            "module_type": r.get("module_type"),
-            "ue_code": r.get("ue_code"),
-            "parcours": r.get("parcours") or "COMMUN",
+            "sous_classification":      r.get("sous_classification"),
+            "sous_classification_nom":  r.get("sous_classification_nom"),
         })
-
     return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CONSTRUCTION HIÉRARCHIQUE
+#  AGRÉGATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_forest_hierarchy(
-    forest_rows,
-    semester_filter="ALL",
-    competence_filter="ALL",
-    max_modules_per_ac=MAX_MODULES_DEFAULT,
-):
+def build_trees(forest_rows, sem_filter="ALL", comp_filter="ALL"):
     """
-    Construit une vraie hiérarchie :
-
-    Compétence
-        -> Niveau
-            -> AC
-                -> Modules
-
-    Les modules sont dédupliqués sous chaque AC.
+    trees[cc] = {
+      "name": str,
+      "levels": { niv: { "acs": { ac: {"desc","mods","names"} } } }
+    }
     """
+    trees = {}
+    for r in forest_rows:
+        sem = r.get("semestre", "?")
+        if sem_filter not in (None, "ALL") and sem != sem_filter:
+            continue
+        if comp_filter not in (None, "ALL") and r.get("competence_code") != comp_filter:
+            continue
 
-    forest = {}
+        cc  = r["competence_code"]
+        ac  = r["ac_code"]
+        mc  = r.get("module_code")
+        niv = r["niveau"]
 
-    for row in forest_rows:
-        if semester_filter and semester_filter != "ALL":
-            if row.get("semestre") != semester_filter:
-                continue
-
-        if competence_filter and competence_filter != "ALL":
-            if row.get("competence_code") != competence_filter:
-                continue
-
-        comp_code = row["competence_code"]
-        level_key = row["niveau"]
-        ac_code = row["ac_code"]
-        module_key = row.get("module_key")
-
-        if comp_code not in forest:
-            forest[comp_code] = {
-                "type": "competence",
-                "code": comp_code,
-                "label": row.get("competence_name") or comp_code,
+        if cc not in trees:
+            trees[cc] = {
+                "name":   r.get("competence_name", ""),
                 "levels": {},
             }
 
-        comp_node = forest[comp_code]
+        lvl = trees[cc]["levels"].setdefault(niv, {"acs": {}})
+        acd = lvl["acs"].setdefault(ac, {
+            "desc":  r.get("ac_description", ""),
+            "mods":  set(),
+            "names": {},
+        })
+        if mc:
+            acd["mods"].add(mc)
+            acd["names"][mc] = r.get("module_name", "") or mc
 
-        if level_key not in comp_node["levels"]:
-            comp_node["levels"][level_key] = {
-                "type": "level",
-                "code": level_key,
-                "label": level_key,
-                "acs": {},
-            }
-
-        level_node = comp_node["levels"][level_key]
-
-        if ac_code not in level_node["acs"]:
-            level_node["acs"][ac_code] = {
-                "type": "ac",
-                "code": ac_code,
-                "label": ac_code,
-                "description": row.get("ac_description") or "",
-                "niveau": level_key,
-                "modules": {},
-                "all_modules": {},
-            }
-
-        ac_node = level_node["acs"][ac_code]
-
-        if module_key:
-            ac_node["all_modules"][module_key] = {
-                "type": "module",
-                "code": row.get("module_code") or module_key,
-                "id": row.get("module_id") or module_key,
-                "label": row.get("module_name") or module_key,
-                "module_type": row.get("module_type"),
-                "ue_code": row.get("ue_code"),
-                "parcours": row.get("parcours"),
-            }
-
-    # Limite de feuilles visibles par AC
-    for comp_node in forest.values():
-        for level_node in comp_node["levels"].values():
-            for ac_node in level_node["acs"].values():
-                modules = list(ac_node["all_modules"].items())
-
-                if len(modules) <= max_modules_per_ac:
-                    ac_node["modules"] = dict(modules)
-                else:
-                    kept = dict(modules[:max_modules_per_ac])
-                    hidden_count = len(modules) - max_modules_per_ac
-
-                    kept[f"MORE::{ac_node['code']}"] = {
-                        "type": "more",
-                        "code": f"+{hidden_count}",
-                        "id": f"MORE::{ac_node['code']}",
-                        "label": f"+{hidden_count} autres modules",
-                    }
-
-                    ac_node["modules"] = kept
-
-    return forest
+    return trees
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CALCUL DES LARGEURS
-# ══════════════════════════════════════════════════════════════════════════════
-
-def compute_ac_width(ac_node):
-    modules_count = max(1, len(ac_node.get("modules", {})))
-    return max(MIN_AC_WIDTH, modules_count * MODULE_GAP)
-
-
-def compute_level_width(level_node):
-    acs = level_node.get("acs", {})
-
-    if not acs:
-        return MIN_LEVEL_WIDTH
-
-    widths = [
-        compute_ac_width(ac_node)
-        for ac_node in acs.values()
-    ]
-
+def _max_mods(trees):
     return max(
-        MIN_LEVEL_WIDTH,
-        sum(widths) + max(0, len(widths) - 1) * AC_GAP
-    )
-
-
-def compute_tree_width(comp_node):
-    levels = comp_node.get("levels", {})
-
-    if not levels:
-        return MIN_TREE_WIDTH
-
-    widths = [
-        compute_level_width(level_node)
-        for level_node in levels.values()
-    ]
-
-    return max(
-        MIN_TREE_WIDTH,
-        sum(widths) + max(0, len(widths) - 1) * LEVEL_GAP
+        (len(a["mods"])
+         for t in trees.values()
+         for lvl in t["levels"].values()
+         for a in lvl["acs"].values()),
+        default=1,
     )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LAYOUT DES NŒUDS
+#  LAYOUT GÉOMÉTRIQUE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def compute_forest_layout(forest):
+def _level_group_width(acs):
+    n = len(acs)
+    return n * BAR_W + max(0, n - 1) * BAR_GAP
+
+
+def _tree_width(tree):
+    n_niv  = len(tree["levels"])
+    max_gw = max((_level_group_width(lvl["acs"]) for lvl in tree["levels"].values()), default=BAR_W)
+    return n_niv * max_gw + max(0, n_niv - 1) * NIV_GAP
+
+
+def compute_layout(trees, max_mods_g):
     """
-    Calcule les positions x/y.
-
-    Chaque compétence est un arbre.
-    Chaque arbre contient :
-    - racine compétence en bas,
-    - niveaux au-dessus,
-    - AC au-dessus,
-    - modules en feuilles.
+    Retourne :
+      pos_comp  {cc: cx}
+      pos_niv   {(cc, niv): (x, y)}
+      pos_bar   {(cc, niv, ac): (x, y_base, y_top)}
+      meta_ac   {(cc, niv, ac): {desc, mods, names}}
     """
+    comp_list = sorted(trees.keys())
+    widths    = {cc: _tree_width(trees[cc]) for cc in comp_list}
+    total     = sum(widths.values()) + max(0, len(comp_list)-1) * COMP_GAP
 
-    positions = {}
-    meta = {}
-    edges = []
+    cursor    = -total / 2
+    pos_comp  = {}
+    pos_niv   = {}
+    pos_bar   = {}
+    meta_ac   = {}
 
-    tree_widths = {
-        comp_code: compute_tree_width(comp_node)
-        for comp_code, comp_node in forest.items()
-    }
+    for cc in comp_list:
+        tree = trees[cc]
+        tw   = widths[cc]
+        cx   = cursor + tw / 2
+        pos_comp[cc] = cx
 
-    total_width = (
-        sum(tree_widths.values())
-        + max(0, len(tree_widths) - 1) * COMP_GAP
-    )
+        niv_list = sorted(tree["levels"].keys())
+        n_niv    = len(niv_list)
 
-    cursor = -total_width / 2
+        # Largeurs de chaque groupe de niveau
+        gws = [_level_group_width(tree["levels"][nv]["acs"]) for nv in niv_list]
+        total_gw = sum(gws) + max(0, n_niv-1) * NIV_GAP
 
-    for comp_code, comp_node in sorted(forest.items()):
-        tree_width = tree_widths[comp_code]
-        tree_center = cursor + tree_width / 2
+        gx_start = cx - total_gw / 2
 
-        comp_id = f"COMP::{comp_code}"
+        for i, niv in enumerate(niv_list):
+            gw  = gws[i]
+            gcx = gx_start + gw / 2      # centre du groupe de niveaux
+            pos_niv[(cc, niv)] = (gcx, Y_NIV)
 
-        positions[comp_id] = (tree_center, Y_COMP)
-        meta[comp_id] = {
-            "type": "competence",
-            "code": comp_code,
-            "label": comp_node["label"],
-            "hover": (
-                f"<b>Compétence : {comp_code}</b><br>"
-                f"{comp_node['label']}"
-            ),
-        }
+            acs     = tree["levels"][niv]["acs"]
+            n_ac    = len(acs)
+            bar_total = n_ac * BAR_W + max(0, n_ac-1) * BAR_GAP
+            bar_start = gcx - bar_total / 2
 
-        level_items = sorted(
-            comp_node["levels"].items(),
-            key=lambda item: level_number(item[0])
-        )
+            for j, (ac, acd) in enumerate(sorted(acs.items())):
+                bx    = bar_start + j * (BAR_W + BAR_GAP) + BAR_W / 2
+                n_mod = len(acd["mods"])
+                h     = (n_mod / max_mods_g) * BAR_MAX_H
+                pos_bar[(cc, niv, ac)] = (bx, Y_BAR_BASE, Y_BAR_BASE + h)
+                meta_ac[(cc, niv, ac)] = acd
 
-        level_widths = [
-            compute_level_width(level_node)
-            for _, level_node in level_items
-        ]
+            gx_start += gw + NIV_GAP
 
-        level_total_width = (
-            sum(level_widths)
-            + max(0, len(level_widths) - 1) * LEVEL_GAP
-        )
+        cursor += tw + COMP_GAP
 
-        level_cursor = tree_center - level_total_width / 2
-
-        for level_index, (level_code, level_node) in enumerate(level_items):
-            level_width = level_widths[level_index]
-            level_center = level_cursor + level_width / 2
-
-            level_id = f"LEVEL::{comp_code}::{level_code}"
-
-            positions[level_id] = (level_center, Y_LEVEL)
-            meta[level_id] = {
-                "type": "level",
-                "code": level_code,
-                "label": level_code,
-                "competence_code": comp_code,
-                "hover": (
-                    f"<b>{level_code}</b><br>"
-                    f"{level_label(level_code)}<br>"
-                    f"Compétence : {comp_code}"
-                ),
-            }
-
-            edges.append((comp_id, level_id, "comp_level", level_code))
-
-            ac_items = sorted(
-                level_node["acs"].items(),
-                key=lambda item: item[0]
-            )
-
-            ac_widths = [
-                compute_ac_width(ac_node)
-                for _, ac_node in ac_items
-            ]
-
-            ac_total_width = (
-                sum(ac_widths)
-                + max(0, len(ac_widths) - 1) * AC_GAP
-            )
-
-            ac_cursor = level_center - ac_total_width / 2
-
-            for ac_index, (ac_code, ac_node) in enumerate(ac_items):
-                ac_width = ac_widths[ac_index]
-                ac_center = ac_cursor + ac_width / 2
-
-                ac_id = f"AC::{ac_code}"
-
-                positions[ac_id] = (ac_center, Y_AC)
-                meta[ac_id] = {
-                    "type": "ac",
-                    "code": ac_code,
-                    "label": ac_code,
-                    "niveau": level_code,
-                    "description": ac_node.get("description", ""),
-                    "competence_code": comp_code,
-                    "all_modules": ac_node.get("all_modules", {}),
-                    "hover": (
-                        f"<b>AC : {ac_code}</b><br>"
-                        f"{level_code} — {level_label(level_code)}<br>"
-                        f"Compétence : {comp_code}<br><br>"
-                        f"<i>{ac_node.get('description', '')}</i>"
-                    ),
-                }
-
-                edges.append((level_id, ac_id, "level_ac", level_code))
-
-                module_items = sorted(ac_node["modules"].items())
-                module_count = len(module_items)
-
-                if module_count == 0:
-                    ac_cursor += ac_width + AC_GAP
-                    continue
-
-                module_start = (
-                    ac_center
-                    - ((module_count - 1) * MODULE_GAP) / 2
-                )
-
-                for module_index, (module_key, module_node) in enumerate(module_items):
-                    module_x = module_start + module_index * MODULE_GAP
-
-                    if module_node["type"] == "more":
-                        module_id = f"MORE::{ac_code}"
-                        node_type = "more"
-                    else:
-                        module_id = f"MODULE::{comp_code}::{ac_code}::{module_key}"
-                        node_type = "module"
-
-                    positions[module_id] = (module_x, Y_MODULE)
-
-                    meta[module_id] = {
-                        "type": node_type,
-                        "code": module_node.get("code") or module_key,
-                        "label": module_node.get("label") or module_key,
-                        "module_id": module_node.get("id") or module_key,
-                        "ac_code": ac_code,
-                        "competence_code": comp_code,
-                        "niveau": level_code,
-                        "hover": (
-                            f"<b>{'Modules masqués' if node_type == 'more' else 'Module'} : "
-                            f"{module_node.get('code') or module_key}</b><br>"
-                            f"{module_node.get('label') or ''}<br>"
-                            f"AC : {ac_code}<br>"
-                            f"Compétence : {comp_code}"
-                        ),
-                    }
-
-                    edges.append((ac_id, module_id, "ac_module", level_code))
-
-                ac_cursor += ac_width + AC_GAP
-
-            level_cursor += level_width + LEVEL_GAP
-
-        cursor += tree_width + COMP_GAP
-
-    return positions, meta, edges
+    return pos_comp, pos_niv, pos_bar, meta_ac
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FOCUS / CLICK
+#  FOCUS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def parse_click(click_data):
-    if not click_data:
+def _parse_sel(sel):
+    if not sel or not isinstance(sel, dict):
+        return None, None
+    return sel.get("type"), sel.get("id")
+
+
+def _active_set(sel, trees):
+    """
+    Retourne un set de clés actives : {"COMP::cc", "NIV::cc::niv", "BAR::cc::niv::ac"}
+    None = tout actif.
+    """
+    kind, sid = _parse_sel(sel)
+    if not kind:
         return None
 
-    try:
-        points = click_data.get("points", [])
-        if not points:
+    active = set()
+
+    if kind == "comp":
+        cc = sid
+        if cc in trees:
+            active.add(f"COMP::{cc}")
+            for niv, lvl in trees[cc]["levels"].items():
+                active.add(f"NIV::{cc}::{niv}")
+                for ac in lvl["acs"]:
+                    active.add(f"BAR::{cc}::{niv}::{ac}")
+
+    elif kind == "niv":
+        cc, niv_s = sid.split("::", 1)
+        try:
+            niv = int(niv_s)
+        except Exception:
             return None
+        active.add(f"COMP::{cc}")
+        active.add(f"NIV::{cc}::{niv}")
+        if cc in trees and niv in trees[cc]["levels"]:
+            for ac in trees[cc]["levels"][niv]["acs"]:
+                active.add(f"BAR::{cc}::{niv}::{ac}")
 
-        customdata = points[0].get("customdata")
+    elif kind == "bar":
+        cc, niv_s, ac = sid.split("::", 2)
+        try:
+            niv = int(niv_s)
+        except Exception:
+            return None
+        active.add(f"COMP::{cc}")
+        active.add(f"NIV::{cc}::{niv}")
+        active.add(f"BAR::{cc}::{niv}::{ac}")
 
-        if isinstance(customdata, list) and len(customdata) >= 2:
-            return {
-                "type": customdata[0],
-                "id": customdata[1],
-            }
+    return active if active else None
 
-    except Exception:
-        return None
-
-    return None
-
-
-def resolve_focus(selected, meta, edges):
-    """
-    Focus / traçabilité robuste.
-
-    Compétence :
-        Compétence -> Niveaux -> AC -> Modules
-
-    Niveau :
-        Compétence -> Niveau -> AC du niveau -> Modules
-
-    AC :
-        Compétence -> Niveau -> AC -> Modules
-
-    Module :
-        Compétence -> Niveau -> AC -> Module
-
-    Si le nœud sélectionné n'existe plus après filtre :
-        reset du focus.
-    """
-
-    if not selected:
-        return None, None
-
-    selected_id = selected.get("id")
-
-    if not selected_id:
-        return None, None
-
-    # Sécurité importante contre les anciens clickData
-    if selected_id not in meta:
-        return None, None
-
-    active_nodes = set()
-    active_edges = set()
-
-    children = {}
-    parents = {}
-
-    for source, target, edge_type, level_code in edges:
-        children.setdefault(source, set()).add(target)
-        parents.setdefault(target, set()).add(source)
-
-    def add_descendants(node_id):
-        active_nodes.add(node_id)
-
-        for child in children.get(node_id, set()):
-            active_edges.add((node_id, child))
-            add_descendants(child)
-
-    def add_ancestors(node_id):
-        active_nodes.add(node_id)
-
-        for parent in parents.get(node_id, set()):
-            active_edges.add((parent, node_id))
-            add_ancestors(parent)
-
-    selected_type = meta[selected_id].get("type")
-
-    if selected_type == "competence":
-        add_descendants(selected_id)
-
-    elif selected_type == "level":
-        add_ancestors(selected_id)
-        add_descendants(selected_id)
-
-    elif selected_type == "ac":
-        add_ancestors(selected_id)
-        add_descendants(selected_id)
-
-    elif selected_type in ["module", "more"]:
-        add_ancestors(selected_id)
-        active_nodes.add(selected_id)
-
-    else:
-        return None, None
-
-    return active_nodes, active_edges
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE PLOTLY
+#  FIGURE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def create_forest_figure(
-    forest_rows,
-    semester_filter="ALL",
-    competence_filter="ALL",
-    max_modules_per_ac=MAX_MODULES_DEFAULT,
-    selected_node=None,
-):
+def create_forest_figure(forest_rows, sem_filter="ALL", comp_filter="ALL",
+                         selected=None):
     if not forest_rows:
         return empty_figure("Aucune donnée ForestED disponible")
 
-    forest = build_forest_hierarchy(
-        forest_rows,
-        semester_filter=semester_filter,
-        competence_filter=competence_filter,
-        max_modules_per_ac=max_modules_per_ac,
-    )
-
-    if not forest:
+    trees = build_trees(forest_rows, sem_filter, comp_filter)
+    if not trees:
         return empty_figure("Aucune donnée disponible pour ce filtre")
 
-    positions, meta, edges = compute_forest_layout(forest)
-    selected = selected_node
-    active_nodes, active_edges = resolve_focus(selected, meta, edges)
+    mg     = _max_mods(trees)
+    pos_comp, pos_niv, pos_bar, meta_ac = compute_layout(trees, mg)
 
-    has_focus = active_nodes is not None
+    active = _active_set(selected, trees)
+    has_focus = active is not None
+
+    def _on(key):
+        return (not has_focus) or (key in active)
 
     fig = go.Figure()
+    shapes = []  # alimenté pendant les traces, appliqué en fin de fonction
 
-    # Liens
-    for source, target, edge_type, level_code in edges:
-        x0, y0 = positions[source]
-        x1, y1 = positions[target]
+    # Une seule palette, toutes les compétences traitées de façon identique
+    comp_order = sorted(trees.keys())
+    comp_schemes = {cc: _comp_scheme(i) for i, cc in enumerate(comp_order)}
 
-        is_active = (
-            not has_focus
-            or (source, target) in active_edges
-        )
+    def _scheme(cc):
+        return comp_schemes[cc]
 
-        if edge_type == "comp_level":
-            color = LINE_COMP_LEVEL if is_active else FADE_LINE
-            width = 2.6 if is_active else 0.7
+    # ── 1. TRONCS (racine → nœuds niveau, couleur par compétence) ────────────
+    lx_off, ly_off = [], []
+    # Un batch par compétence pour conserver la couleur
+    for cc, cx in pos_comp.items():
+        sch = _scheme(cc)
+        line_col = sch["line"] if _on(f"COMP::{cc}") else FADE_LINE
+        lw = 3.0 if _on(f"COMP::{cc}") else 0.7
+        lx, ly = [], []
+        for (cc2, niv), (nx, ny) in pos_niv.items():
+            if cc2 != cc: continue
+            lx.extend([cx, nx, None])
+            ly.extend([Y_COMP + 0.25, Y_NIV - 0.25, None])
+        if lx:
+            fig.add_trace(go.Scatter(x=lx, y=ly, mode="lines",
+                line=dict(color=line_col, width=lw), opacity=0.55,
+                hoverinfo="none", showlegend=False))
 
-        elif edge_type == "level_ac":
-            color_base = level_color(level_code)
-            alpha = 0.46 if is_active else 0.08
-            color = f"rgba({hex_to_rgb(color_base)},{alpha})"
-            width = 1.8 if is_active else 0.6
+    # ── 2. TIGES niveau → barres (couleur par compétence × niveau) ───────────
+    for cc in comp_order:
+        sch = _scheme(cc)
+        for niv_ref in (1, 2, 3):
+            nk = _niv_key(niv_ref)
+            _, _, tige_col = sch[nk]
+            tx, ty = [], []
+            for (cc2, niv), (nx, _) in pos_niv.items():
+                if cc2 != cc or niv != niv_ref: continue
+                for (cc3, nv3, ac), (bx, yb, yt) in pos_bar.items():
+                    if cc3 != cc or nv3 != niv_ref: continue
+                    if not _on(f"BAR::{cc}::{niv_ref}::{ac}"): continue
+                    tx.extend([nx, bx, None])
+                    ty.extend([Y_NIV + 0.22, yb, None])
+            if tx:
+                fig.add_trace(go.Scatter(x=tx, y=ty, mode="lines",
+                    line=dict(color=tige_col if _on(f"NIV::{cc}::{niv_ref}") else FADE_LINE,
+                              width=1.1), opacity=0.45,
+                    hoverinfo="none", showlegend=False))
 
-        else:
-            color = LINE_AC_MODULE if is_active else FADE_LINE
-            width = 1.1 if is_active else 0.45
+    # ── 3. BARRES AC (couleur par compétence × niveau) ────────────────────────
+    for cc in comp_order:
+        sch = _scheme(cc)
+        for niv_ref in (1, 2, 3):
+            nk = _niv_key(niv_ref)
+            bar_fill, bar_text, bar_border = sch[nk]
+            niv_labels = {1: "Débutant", 2: "Intermédiaire", 3: "Avancé"}
+            bx_on, by_on, bh_on, hov_on, cd_on = [], [], [], [], []
+            bx_off, by_off, bh_off, hov_off, cd_off = [], [], [], [], []
 
+            for (cc2, niv, ac), (bx, yb, yt) in pos_bar.items():
+                if cc2 != cc or niv != niv_ref: continue
+                acd   = meta_ac[(cc, niv, ac)]
+                n_mod = len(acd["mods"])
+                h     = yt - yb
+                on    = _on(f"BAR::{cc}::{niv}::{ac}")
+                hover = (f"<b>{ac}</b><br>N{niv} — {niv_labels[niv_ref]}<br>"
+                         f"Compétence : {cc}<br>{n_mod} module(s)<br><br>"
+                         f"<i>{acd['desc'][:100]}{'…' if len(acd['desc'])>100 else ''}</i><br>"
+                         f"🖱 Cliquez pour les modules")
+                cd = ["bar", f"{cc}::{niv}::{ac}"]
+                if on:
+                    bx_on.append(bx); by_on.append(yb); bh_on.append(h)
+                    hov_on.append(hover); cd_on.append(cd)
+                else:
+                    bx_off.append(bx); by_off.append(yb); bh_off.append(h)
+                    hov_off.append(hover); cd_off.append(cd)
+
+            if bx_on:
+                bar_marker = dict(
+                    color=bar_fill, opacity=0.90,
+                    line=dict(width=0.8, color=bar_border),
+                )
+                fig.add_trace(go.Bar(
+                    x=bx_on, y=bh_on, base=by_on,
+                    width=[BAR_W * 0.9] * len(bx_on),
+                    marker=bar_marker,
+                    text=[""] * len(bx_on),
+                    hovertext=hov_on, hoverinfo="text",
+                    hoverlabel=dict(bgcolor=bar_border, bordercolor="white",
+                                    font=dict(color=bar_text, size=12)),
+                    customdata=cd_on,
+                    name=f"{cc} N{niv_ref}", showlegend=False,
+                ))
+            if bx_off:
+                fig.add_trace(go.Bar(
+                    x=bx_off, y=bh_off, base=by_off,
+                    width=[BAR_W * 0.9] * len(bx_off),
+                    marker=dict(color=FADE, opacity=0.20, line=dict(width=0)),
+                    text=[""] * len(bx_off),
+                    hovertext=hov_off, hoverinfo="text",
+                    customdata=cd_off, showlegend=False,
+                ))
+
+    # ── 4. COMPTEUR barres ────────────────────────────────────────────────────
+    tx_cnt, ty_cnt, ttxt, tcol = [], [], [], []
+    for (cc, niv, ac), (bx, yb, yt) in pos_bar.items():
+        acd = meta_ac[(cc, niv, ac)]
+        n   = len(acd["mods"])
+        on  = _on(f"BAR::{cc}::{niv}::{ac}")
+        sch = _scheme(cc)
+        nk  = _niv_key(niv)
+        _, txt_col, _ = sch[nk]
+        tx_cnt.append(bx); ty_cnt.append(yt + 0.15); ttxt.append(str(n))
+        tcol.append(txt_col if on else "rgba(148,163,184,0.45)")
+    if tx_cnt:
+        fig.add_trace(go.Scatter(x=tx_cnt, y=ty_cnt, mode="text", text=ttxt,
+            textfont=dict(size=9, color=tcol),
+            hoverinfo="none", showlegend=False))
+
+    # ── 5. NŒUDS NIVEAU (carrés, couleur par compétence) ─────────────────────
+    for cc in comp_order:
+        sch = _scheme(cc)
+        niv_labels = {1: "Débutant", 2: "Intermédiaire", 3: "Avancé"}
+        for niv_ref in (1, 2, 3):
+            nk = _niv_key(niv_ref)
+            fill, txt, bdr = sch[nk]
+            nx_, ny_, nhov, ncd, ncol, nsz, nbdr = [], [], [], [], [], [], []
+            for (cc2, niv), (nx, ny) in pos_niv.items():
+                if cc2 != cc or niv != niv_ref: continue
+                on = _on(f"NIV::{cc}::{niv}")
+                lvl   = trees[cc]["levels"].get(niv, {"acs": {}})
+                n_ac  = len(lvl["acs"])
+                n_mod = sum(len(a["mods"]) for a in lvl["acs"].values())
+                nx_.append(nx); ny_.append(ny)
+                nhov.append(f"<b>N{niv_ref} — {niv_labels[niv_ref]}</b><br>"
+                            f"Compétence : {cc}<br>{n_ac} AC · {n_mod} module(s)")
+                ncd.append(["niv", f"{cc}::{niv}"])
+                ncol.append(fill if on else FADE)
+                nbdr.append(bdr if on else FADE)
+                nsz.append(16 if on else 9)
+            if not nx_: continue
+            fig.add_trace(go.Scatter(
+                x=nx_, y=ny_, mode="markers+text",
+                marker=dict(symbol="square", size=nsz, color=ncol,
+                            line=dict(width=1.2, color=nbdr)),
+                text=[f"N{niv_ref}"] * len(nx_),
+                textposition="middle center",
+                textfont=dict(size=9, color=[txt if on else "#94A3B8"
+                                             for on in [_on(f"NIV::{cc}::{niv_ref}")]
+                                             for _ in nx_]),
+                hovertext=nhov, hoverinfo="text",
+                hoverlabel=dict(bgcolor=bdr, bordercolor="white",
+                                font=dict(size=12)),
+                customdata=ncd, showlegend=False,
+            ))
+
+    # ── 6. RACINES COMPÉTENCES (losanges colorés) ─────────────────────────────
+    for cc, cx in pos_comp.items():
+        sch  = _scheme(cc)
+        on   = _on(f"COMP::{cc}")
+        tree = trees[cc]
+        root_fill, root_txt, root_bdr = sch["root"]
+        n_ac = sum(len(l["acs"]) for l in tree["levels"].values())
+        n_m  = len({m for l in tree["levels"].values()
+                    for a in l["acs"].values() for m in a["mods"]})
+        col   = root_fill if on else FADE
+        bdr_c = root_bdr  if on else FADE
+        sz    = 20 if on else 11
         fig.add_trace(go.Scatter(
-            x=[x0, x1],
-            y=[y0, y1],
-            mode="lines",
-            line=dict(color=color, width=width),
-            hoverinfo="none",
-            showlegend=False,
-        ))
-
-    # Nœuds par type
-    traces_by_type = {
-        "competence": {
-            "x": [], "y": [], "customdata": [], "hover": [],
-            "text": [], "color": [], "size": [],
-        },
-        "level": {
-            "x": [], "y": [], "customdata": [], "hover": [],
-            "text": [], "color": [], "size": [],
-        },
-        "ac": {
-            "x": [], "y": [], "customdata": [], "hover": [],
-            "text": [], "color": [], "size": [],
-        },
-        "module": {
-            "x": [], "y": [], "customdata": [], "hover": [],
-            "text": [], "color": [], "size": [],
-        },
-        "more": {
-            "x": [], "y": [], "customdata": [], "hover": [],
-            "text": [], "color": [], "size": [],
-        },
-    }
-
-    for node_id, node_meta in meta.items():
-        node_type = node_meta["type"]
-        x, y = positions[node_id]
-
-        is_active = (
-            not has_focus
-            or node_id in active_nodes
-        )
-
-        if node_type == "competence":
-            color = COLOR_COMPETENCE if is_active else FADE_NODE
-            size = 20 if is_active else 12
-            text = f"<b>{node_meta['code']}</b>" if is_active else ""
-
-        elif node_type == "level":
-            color = COLOR_LEVEL if is_active else FADE_NODE
-            size = 15 if is_active else 9
-            text = node_meta["code"] if is_active else ""
-
-        elif node_type == "ac":
-            color = level_color(node_meta.get("niveau")) if is_active else FADE_NODE
-            size = 12 if is_active else 7
-            text = ""
-
-        elif node_type == "more":
-            color = "#F8FAFC" if is_active else FADE_NODE
-            size = 17 if is_active else 10
-            text = node_meta["code"] if is_active else ""
-
-        else:
-            color = COLOR_MODULE if is_active else FADE_NODE
-            size = 8 if is_active else 5
-            text = ""
-
-        traces_by_type[node_type]["x"].append(x)
-        traces_by_type[node_type]["y"].append(y)
-        traces_by_type[node_type]["customdata"].append([node_type, node_id])
-        traces_by_type[node_type]["hover"].append(node_meta["hover"])
-        traces_by_type[node_type]["text"].append(text)
-        traces_by_type[node_type]["color"].append(color)
-        traces_by_type[node_type]["size"].append(size)
-
-    def add_node_trace(node_type, name, symbol, border_color, text_position):
-        data = traces_by_type[node_type]
-
-        if not data["x"]:
-            return
-
-        fig.add_trace(go.Scatter(
-            x=data["x"],
-            y=data["y"],
-            mode="markers+text" if any(data["text"]) else "markers",
-            text=data["text"],
-            textposition=text_position,
-            textfont=dict(size=9, color="#0F172A"),
-            marker=dict(
-                color=data["color"],
-                size=data["size"],
-                symbol=symbol,
-                line=dict(width=1.2, color=border_color),
-            ),
-            customdata=data["customdata"],
-            hovertext=data["hover"],
+            x=[cx], y=[Y_COMP], mode="markers+text",
+            marker=dict(symbol="diamond", size=sz, color=col,
+                        line=dict(width=2.5, color=bdr_c)),
+            text=[f"<b>{cc}</b>" if on else ""],
+            textposition="bottom center",
+            textfont=dict(size=10, color=root_bdr),
+            hovertext=[f"<b>{cc}</b><br><i>{tree['name']}</i><br>"
+                       f"{n_ac} AC · {n_m} modules"],
             hoverinfo="text",
-            name=name,
+            hoverlabel=dict(bgcolor=root_bdr, bordercolor="white",
+                            font=dict(color=root_txt, size=12)),
+            customdata=[["comp", cc]], showlegend=False,
         ))
 
-    add_node_trace("competence", "Compétence", "diamond", COLOR_COMP_BORDER, "bottom center")
-    add_node_trace("level", "Niveau", "circle", COLOR_LEVEL_BORDER, "middle center")
-    add_node_trace("ac", "AC", "circle", "white", "top center")
-    add_node_trace("module", "Module", "square", COLOR_MODULE_BORDER, "top center")
-    add_node_trace("more", "+N modules", "circle", "#CBD5E1", "middle center")
+    # ── 7. LABELS DE COUCHE (gauche) ─────────────────────────────────────────
+    all_x = [cx for cx in pos_comp.values()]
+    xmin  = min(all_x) - 4.0
+    xmax  = max(all_x) + 4.0
+    bar_mid = Y_BAR_BASE + BAR_MAX_H / 2
 
-    xs = [x for x, _ in positions.values()]
-    x_min = min(xs) - 5
-    x_max = max(xs) + 5
-
-    # Bandes horizontales discrètes
-    for y_value, color in [
-        (Y_COMP, "rgba(30,64,175,0.05)"),
-        (Y_LEVEL, "rgba(100,116,139,0.04)"),
-        (Y_AC, "rgba(245,158,11,0.04)"),
-        (Y_MODULE, "rgba(5,150,105,0.05)"),
+    for y_val, lbl, col in [
+        (bar_mid, "AC (barres)", "#475569"),
+        (Y_NIV,   "Niveaux",     "#475569"),
+        (Y_COMP,  "Compétences", "#475569"),
     ]:
-        fig.add_shape(
-            type="rect",
-            x0=x_min,
-            x1=x_max,
-            y0=y_value - 0.45,
-            y1=y_value + 0.45,
-            fillcolor=color,
-            line=dict(width=0),
-            layer="below",
-        )
+        fig.add_trace(go.Scatter(
+            x=[xmin - 0.5], y=[y_val], mode="text",
+            text=[f"<b>{lbl}</b>"],
+            textfont=dict(size=11, color=col),
+            textposition="middle right",
+            hoverinfo="none", showlegend=False,
+        ))
 
-    # Libellés à gauche
-    label_x = x_min - 1.5
-
-    labels = [
-        (Y_MODULE, "Modules", COLOR_MODULE),
-        (Y_AC, "AC", "#475569"),
-        (Y_LEVEL, "Niveaux", "#475569"),
-        (Y_COMP, "Compétences", COLOR_COMPETENCE),
+    # ── SHAPES : fonds discrets ───────────────────────────────────────────────
+    shapes += [
+        dict(type="rect", x0=xmin, x1=xmax,
+             y0=Y_BAR_BASE - 0.1, y1=Y_BAR_BASE + BAR_MAX_H + 0.4,
+             fillcolor="rgba(107,114,128,0.04)", line=dict(width=0), layer="below"),
+        dict(type="rect", x0=xmin, x1=xmax,
+             y0=Y_NIV - 0.4, y1=Y_NIV + 0.4,
+             fillcolor="rgba(107,114,128,0.04)", line=dict(width=0), layer="below"),
+        dict(type="line", x0=xmin, x1=xmax,
+             y0=Y_BAR_BASE, y1=Y_BAR_BASE,
+             line=dict(color="rgba(148,163,184,0.30)", width=0.8), layer="below"),
     ]
 
-    for y, label, color in labels:
-        fig.add_trace(go.Scatter(
-            x=[label_x],
-            y=[y],
-            text=[f"<b>{label}</b>"],
-            mode="text",
-            textfont=dict(size=12, color=color),
-            hoverinfo="none",
-            showlegend=False,
-        ))
+    # ── TITRE & LAYOUT ────────────────────────────────────────────────────────
+    kind, sid = _parse_sel(selected)
+    focus_lbl = ""
+    if kind == "comp":
+        focus_lbl = f" · <b>{sid}</b>"
+    elif kind == "niv":
+        cc, nv = sid.split("::", 1)
+        focus_lbl = f" · <b>{cc} N{nv}</b>"
+    elif kind == "bar":
+        cc, nv, ac = sid.split("::", 2)
+        focus_lbl = f" · <b>{ac}</b>"
 
-    # Label semestre si un seul semestre sélectionné
-    if semester_filter and semester_filter != "ALL":
-        fig.add_trace(go.Scatter(
-            x=[(x_min + x_max) / 2],
-            y=[Y_SEMESTER],
-            text=[f"<b>{semester_filter}</b>"],
-            mode="text",
-            textfont=dict(size=18, color=COLOR_COMPETENCE),
-            hoverinfo="none",
-            showlegend=False,
-        ))
-
-    focus_text = ""
-
-    if selected and selected.get("id") in meta:
-        focus_text = (
-            f" · Focus : "
-            f"<b>{meta[selected['id']].get('code', '')}</b>"
-        )
+    n_comp  = len(trees)
+    n_ac    = sum(len(l["acs"]) for t in trees.values() for l in t["levels"].values())
+    n_mods  = len({m for t in trees.values() for l in t["levels"].values()
+                   for a in l["acs"].values() for m in a["mods"]})
 
     fig.update_layout(
         title=dict(
-            text=(
-                "<b>ForestED — Forêt hiérarchique APC</b>"
-                "<span style='color:#94A3B8;font-size:13px'>"
-                " · Compétence → Niveau → AC → Modules"
-                f"{focus_text}"
-                "</span>"
-            ),
-            x=0.01,
-            y=0.98,
-            font=dict(size=17, color="#0F172A"),
-        ),
-        height=880,
-        paper_bgcolor="#F8FAFB",
-        plot_bgcolor="#FFFFFF",
+            text=(f"<b>ForestED — Forêt pédagogique APC</b>"
+                  f"<span style='color:#94A3B8;font-size:13px'>"
+                  f" · {n_comp} compétences · {n_ac} AC · {n_mods} modules"
+                  f"{focus_lbl}</span>"),
+            x=0.01, y=0.98, font=dict(size=16, color="#0F172A")),
+        height=720,
+        paper_bgcolor="#F8FAFB", plot_bgcolor="#FFFFFF",
+        barmode="overlay",
         showlegend=True,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            bgcolor="rgba(255,255,255,0.94)",
-            bordercolor="#E4E9F0",
-            borderwidth=1,
-            font=dict(size=12, color="#374151"),
-        ),
-        margin=dict(l=170, r=60, t=80, b=80),
-        xaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-            range=[x_min - 3, x_max + 2],
-        ),
-        yaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-            range=[-2.2, 10.6],
-        ),
-        clickmode="event",
-        hovermode="closest",
+        legend=dict(orientation="h", yanchor="bottom", y=1.01,
+                    xanchor="right", x=1, bgcolor="rgba(255,255,255,0.94)",
+                    bordercolor="#E4E9F0", borderwidth=1,
+                    font=dict(size=12, color="#374151")),
+        margin=dict(l=120, r=50, t=75, b=30),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False,
+                   range=[xmin - 1.5, xmax + 0.5]),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False,
+                   range=[Y_COMP - 0.9, Y_BAR_BASE + BAR_MAX_H + 0.8]),
+        shapes=shapes, clickmode="event", hovermode="closest",
     )
-
     return fig
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# OPTIONS FILTRES
+#  PANNEAU DE DÉTAIL
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_semester_options(forest_rows):
-    semesters = sorted(
-        {row["semestre"] for row in forest_rows if row.get("semestre")},
-        key=sort_semester,
-    )
-
-    return [{"label": "Tous les semestres", "value": "ALL"}] + [
-        {"label": semester, "value": semester}
-        for semester in semesters
-    ]
-
-
-def build_competence_options(forest_rows, semester_filter="ALL"):
-    rows = forest_rows
-
-    if semester_filter and semester_filter != "ALL":
-        rows = [
-            row for row in forest_rows
-            if row.get("semestre") == semester_filter
-        ]
-
-    competences = {}
-
-    for row in rows:
-        code = row.get("competence_code")
-        name = row.get("competence_name") or code
-
-        if code:
-            competences[code] = name
-
-    return [{"label": "Toutes les compétences", "value": "ALL"}] + [
-        {
-            "label": f"{code} — {name}",
-            "value": code,
-        }
-        for code, name in sorted(competences.items())
-    ]
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PANEL DÉTAIL
-# ══════════════════════════════════════════════════════════════════════════════
-
-def build_focus_panel(forest_rows, click_data):
-    selected = parse_click(click_data)
-
-    if not selected:
-        return html.Div()
-    if not selected.get("id"):
+def build_focus_panel(forest_rows, selected, trees, sem_filter="ALL"):
+    kind, sid = _parse_sel(selected)
+    if not kind:
         return html.Div()
 
-    selected_type = selected["type"]
-    selected_id = selected["id"]
+    # Filtrer les rows par semestre actif (les orphelins passent toujours)
+    def _sem_ok(r):
+        if sem_filter in (None, "ALL"):
+            return True
+        # Filtre strict : même les orphelins ont maintenant un semestre déduit
+        return r.get("semestre") == sem_filter
 
-    related = []
+    # Trouver l'index de la compétence pour la palette dynamique
+    def _comp_border(cc, niv=None):
+        """Retourne la couleur de bordure du panneau selon la compétence et le niveau."""
+        all_comps = sorted({r.get("competence_code") for r in forest_rows
+                            if r.get("competence_code")})
+        idx = all_comps.index(cc) if cc in all_comps else 0
+        sch = _comp_scheme(idx)
+        if niv is None:
+            return sch["root"][2]   # border root (plus visible que fill)
+        return sch[_niv_key(niv)][2]
 
-    if selected_type == "competence":
-        comp_code = selected_id.replace("COMP::", "")
-        related = [
-            row for row in forest_rows
-            if row.get("competence_code") == comp_code
-        ]
-        title = f"Compétence : {comp_code}"
+    if kind == "comp":
+        cc      = sid
+        related = [r for r in forest_rows if r.get("competence_code") == cc and _sem_ok(r)]
+        border  = _comp_border(cc)
+        title   = f"Compétence : {cc}"
+        name    = (related[0].get("competence_name","") if related else "")
+        comps_  = [cc]
+        acs_    = sorted({r["ac_code"] for r in related})
+        mods_   = sorted({r["module_code"] for r in related if r.get("module_code")})
 
-    elif selected_type == "level":
-        parts = selected_id.split("::")
-        comp_code = parts[1] if len(parts) > 1 else ""
-        level_code = parts[2] if len(parts) > 2 else ""
-        related = [
-            row for row in forest_rows
-            if row.get("competence_code") == comp_code
-            and row.get("niveau") == level_code
-        ]
-        title = f"{level_code} — {level_label(level_code)}"
+    elif kind == "niv":
+        cc, nv_s = sid.split("::", 1)
+        try:
+            niv = int(nv_s)
+        except Exception:
+            return html.Div()
+        niv_labels = {1: "Débutant", 2: "Intermédiaire", 3: "Avancé"}
+        related = [r for r in forest_rows
+                   if r.get("competence_code") == cc
+                   and r.get("niveau") == niv
+                   and _sem_ok(r)]
+        border  = _comp_border(cc, niv)
+        title   = f"Niveau {niv} — {niv_labels.get(niv, str(niv))}"
+        name    = cc
+        comps_  = [cc]
+        acs_    = sorted({r["ac_code"] for r in related})
+        mods_   = sorted({r["module_code"] for r in related if r.get("module_code")})
 
-    elif selected_type == "ac":
-        ac_code = selected_id.replace("AC::", "")
-        related = [
-            row for row in forest_rows
-            if row.get("ac_code") == ac_code
-        ]
-        title = f"AC : {ac_code}"
-
-    elif selected_type == "module":
-        module_key = selected_id.split("::")[-1]
-        related = [
-            row for row in forest_rows
-            if row.get("module_key") == module_key
-        ]
-        title = f"Module : {module_key}"
-
-    elif selected_type == "more":
-        title = "Modules masqués"
-        related = []
+    elif kind == "bar":
+        cc, nv_s, ac = sid.split("::", 2)
+        try:
+            niv = int(nv_s)
+        except Exception:
+            return html.Div()
+        related = [r for r in forest_rows if r.get("ac_code") == ac and _sem_ok(r)]
+        border  = _comp_border(cc, niv)
+        title   = f"AC : {ac}"
+        name    = next((r.get("ac_description","") for r in related), "")
+        comps_  = sorted({r["competence_code"] for r in related})
+        acs_    = [ac]
+        mods_   = sorted({r["module_code"] for r in related if r.get("module_code")})
 
     else:
         return html.Div()
 
-    competences = sorted({
-        row.get("competence_code")
-        for row in related
-        if row.get("competence_code")
-    })
+    def _tags(items, bg, color):
+        return html.Div([
+            html.Span(it, style={
+                "backgroundColor": bg, "color": color, "borderRadius": "5px",
+                "padding": "3px 8px", "fontSize": "11px",
+                "marginRight": "5px", "marginBottom": "5px",
+                "display": "inline-block",
+            }) for it in items[:80]
+        ], style={"display": "flex", "flexWrap": "wrap"})
 
-    acs = sorted({
-        row.get("ac_code")
-        for row in related
-        if row.get("ac_code")
-    })
-
-    modules = sorted({
-        row.get("module_code")
-        for row in related
-        if row.get("module_code")
-    })
-
-    return html.Div([
-        html.Div([
-            html.H4(title, style={
-                "margin": "0 0 8px",
-                "color": "#0F172A",
-                "fontSize": "15px",
-            }),
-
-            html.P(
-                f"{len(competences)} compétence(s) · {len(acs)} AC · {len(modules)} module(s)",
-                style={
-                    "margin": "0 0 10px",
-                    "fontSize": "12px",
-                    "color": "#64748B",
-                }
-            ),
-
-            html.Div([
-                detail_section("Compétences", competences, "#DBEAFE", "#1E40AF"),
-                detail_section("AC", acs, "#EDE9FE", "#6D28D9"),
-                detail_section("Modules", modules, "#D1FAE5", "#065F46"),
-            ])
-        ], style={
-            "backgroundColor": "#FFFFFF",
-            "border": "1px solid #E2E8F0",
-            "borderLeft": "4px solid #1E40AF",
-            "borderRadius": "8px",
-            "padding": "14px 18px",
-            "marginBottom": "14px",
-            "boxShadow": "0 2px 8px rgba(0,0,0,0.05)",
-        })
-    ])
-
-
-def detail_section(title, items, bg, color):
-    if not items:
-        return html.Div()
-
-    return html.Div([
-        html.P(
-            f"{title} ({len(items)})",
-            style={
-                "fontWeight": "700",
-                "fontSize": "12px",
-                "color": color,
-                "margin": "8px 0 5px",
-            }
-        ),
-        html.Div([
-            html.Span(
-                item,
-                style={
-                    "backgroundColor": bg,
-                    "color": color,
-                    "borderRadius": "5px",
-                    "padding": "3px 8px",
-                    "fontSize": "11px",
-                    "marginRight": "5px",
-                    "marginBottom": "5px",
-                    "display": "inline-block",
-                }
-            )
-            for item in items[:60]
+    def _section(lbl, items, bg, col):
+        if not items:
+            return html.Div()
+        return html.Div([
+            html.P(f"{lbl} ({len(items)})",
+                   style={"fontWeight": "700", "fontSize": "12px",
+                          "color": col, "margin": "8px 0 5px"}),
+            _tags(items, bg, col),
         ])
-    ])
+
+    body = []
+    if name and name != title:
+        body.append(html.P(name, style={"fontSize": "13px", "color": "#475569",
+                                         "fontStyle": "italic", "margin": "0 0 10px"}))
+    body.append(html.P(
+        f"{len(comps_)} compétence(s) · {len(acs_)} AC · {len(mods_)} module(s)",
+        style={"fontSize": "12px", "color": "#64748B", "margin": "0 0 10px"}))
+    body.append(_section("Compétences", comps_, "#DBEAFE", "#1E40AF"))
+    body.append(_section("AC", acs_, "#EDE9FE", "#6D28D9"))
+    body.append(_section("Modules", mods_, "#D1FAE5", "#065F46"))
+    body.append(html.P("Cliquez le même élément ou ✕ Réinitialiser pour effacer.",
+                       style={"fontSize": "11px", "color": "#94A3B8",
+                              "margin": "10px 0 0", "fontStyle": "italic"}))
+
+    return html.Div([html.Div([
+        html.Div([
+            html.Span(style={"width": "10px", "height": "10px", "borderRadius": "2px",
+                              "backgroundColor": border, "display": "inline-block",
+                              "marginRight": "8px"}),
+            html.Span(title, style={"fontWeight": "700", "fontSize": "14px",
+                                     "color": "#0F172A"}),
+        ], style={"display": "flex", "alignItems": "center", "marginBottom": "8px"}),
+        *body,
+    ], style={"backgroundColor": "#FFFFFF", "border": "1px solid #E2E8F0",
+               "borderLeft": f"4px solid {border}", "borderRadius": "8px",
+               "padding": "14px 18px", "marginBottom": "14px",
+               "boxShadow": "0 2px 8px rgba(0,0,0,0.05)"})])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# LAYOUT DASH
+#  OPTIONS FILTRES
 # ══════════════════════════════════════════════════════════════════════════════
+
+def build_semester_options(forest_rows):
+    # Exclure "?" : les orphelins (sem=None → "?") ne doivent pas apparaître
+    # comme semestre sélectionnable — ils sont toujours inclus dans tous les filtres.
+    sems = sorted(
+        {r["semestre"] for r in forest_rows
+         if r.get("semestre") and r["semestre"] != "?"},
+        key=_sort_sem,
+    )
+    return [{"label": "Tous les semestres", "value": "ALL"}] + \
+           [{"label": s, "value": s} for s in sems]
+
+
+def build_competence_options(forest_rows, sem="ALL"):
+    # Les orphelins (sem="?") sont inclus dans tous les filtres semestre :
+    # on les inclut dans les options compétences même avec un filtre spécifique.
+    if sem in (None, "ALL"):
+        rows = forest_rows
+    else:
+        rows = [r for r in forest_rows if r.get("semestre") == sem]
+    comps = {}
+    for r in rows:
+        c = r.get("competence_code")
+        if c: comps[c] = r.get("competence_name") or c
+    return [{"label": "Toutes les compétences", "value": "ALL"}] + \
+           [{"label": f"{c} — {n}", "value": c} for c, n in sorted(comps.items())]
+
+
+
+def normalize_text(value):
+    """
+    Normalisation robuste pour comparer les codes.
+    Exemple :
+    BUT_MP, but-mp, But MP => BUT MP
+    """
+    if value is None:
+        return ""
+
+    return (
+        str(value)
+        .strip()
+        .upper()
+        .replace("_", " ")
+        .replace("-", " ")
+    )
+
+
+def compact_code(value):
+    """
+    Version compacte pour comparer les codes.
+    Exemple :
+    BUT_MP => BUTMP
+    BUT MP => BUTMP
+    """
+    return normalize_text(value).replace(" ", "")
+
+
+def clean_parcours_label(value):
+    """
+    Nettoyage visuel du label affiché dans le dropdown.
+    Exemple :
+    BUT_MP => MP
+    BUT_PCLG => PCLG
+    """
+    if not value:
+        return ""
+
+    text = str(value).strip()
+
+    for prefix in ("BUT_", "BUT-", "BUT "):
+        if text.upper().startswith(prefix):
+            return text[len(prefix):]
+
+    return text
+
+
+def is_common_sous_classification(code, label):
+    """
+    Détecte le tronc commun sans hardcoder COMP_1, COMP_2, COMP_3.
+    On se base sur les métadonnées du référentiel.
+    """
+    text = normalize_text(f"{code or ''} {label or ''}")
+
+    return (
+        "TRONC COMMUN" in text
+        or "COMMUN" in text
+        or text.strip() == "TC"
+        or text.endswith(" TC")
+        or " TC " in f" {text} "
+    )
+
+
+def is_essential_competence_code(competence_code):
+    """
+    Détecte une compétence essentielle/générique par convention de nommage.
+
+    Exemples :
+    COMP_1      => essentielle
+    COMP_2      => essentielle
+    COMP_MP_1   => parcours MP
+    COMP_PCLG_1 => parcours PCLG
+
+    Ce n'est pas du hardcoding métier : on ne liste pas COMP_1, COMP_2, COMP_3.
+    On détecte seulement la forme générique COMP_<nombre>.
+    """
+    if not competence_code:
+        return False
+
+    return re.match(r"^COMP_\d+$", str(competence_code).strip().upper()) is not None
+
+
+def extract_parcours_from_competence_code(competence_code):
+    """
+    Extrait le parcours depuis un code compétence optionnel.
+
+    Exemples :
+    COMP_MP_1   => MP
+    COMP_PCLG_1 => PCLG
+    COMP_ATN_1  => ATN
+    COMP_1      => None
+    """
+    if not competence_code:
+        return None
+
+    match = re.match(
+        r"^COMP_([A-Z][A-Z0-9]*)_\d+$",
+        str(competence_code).strip().upper()
+    )
+
+    if not match:
+        return None
+
+    return match.group(1)
+
+
+def row_matches_selected_parcours(row, selected_parcours):
+    """
+    Vérifie si une ligne appartient au parcours sélectionné.
+
+    Compatible avec :
+    - selected = MP
+    - selected = BUT_MP
+    - sous_classification = BUT_MP
+    - competence_code = COMP_MP_1
+    """
+    if not selected_parcours or selected_parcours == "ALL":
+        return True
+
+    selected_norm = compact_code(selected_parcours)
+    selected_short = selected_norm.replace("BUT", "", 1) if selected_norm.startswith("BUT") else selected_norm
+
+    sous_code = compact_code(row.get("sous_classification"))
+    parcours = compact_code(row.get("parcours"))
+
+    values = {
+        sous_code,
+        parcours,
+    }
+
+    # Ajouter versions sans préfixe BUT
+    values |= {
+        v.replace("BUT", "", 1)
+        for v in values
+        if v.startswith("BUT")
+    }
+
+    comp_parcours = extract_parcours_from_competence_code(
+        row.get("competence_code")
+    )
+
+    if comp_parcours:
+        values.add(compact_code(comp_parcours))
+
+    return selected_norm in values or selected_short in values
+
+def get_competence_family(competence_code):
+    """
+    Analyse un code compétence.
+
+    Retourne :
+    - ("essential", None) pour COMP_1, COMP_2, COMP_3...
+    - ("parcours", "MP") pour COMP_MP_1
+    - ("parcours", "MPBS") pour COMP_MPBS_1
+    - ("unknown", None) sinon
+
+    Cette logique est générique :
+    on ne hardcode pas COMP_1, COMP_2, COMP_3.
+    On utilise uniquement la convention de nommage.
+    """
+
+    if not competence_code:
+        return "unknown", None
+
+    code = str(competence_code).strip().upper()
+
+    # Compétence essentielle : COMP_1, COMP_2, COMP_3...
+    if re.match(r"^COMP_\d+$", code):
+        return "essential", None
+
+    # Compétence de parcours : COMP_MP_1, COMP_MPBS_1, COMP_PCLG_1...
+    match = re.match(r"^COMP_([A-Z][A-Z0-9]*)_\d+$", code)
+
+    if match:
+        return "parcours", match.group(1)
+
+    return "unknown", None
+
+
+def normalize_selected_parcours(selected_parcours):
+    """
+    Normalise la valeur sélectionnée dans le dropdown.
+
+    Exemples :
+    - MP      => MP
+    - BUT_MP  => MP
+    - but-mpbs => MPBS
+    """
+
+    if not selected_parcours or selected_parcours == "ALL":
+        return "ALL"
+
+    value = str(selected_parcours).strip().upper()
+    value = value.replace("-", "_").replace(" ", "_")
+
+    if value.startswith("BUT_"):
+        value = value.replace("BUT_", "", 1)
+
+    return value
+
+
+def get_allowed_competence_codes_for_parcours(forest_rows, selected_parcours):
+    """
+    Détermine les compétences à afficher.
+
+    Règle métier :
+    - Tous les parcours : toutes les compétences.
+    - Parcours sélectionné : compétences essentielles + compétences du parcours.
+
+    Exemple :
+    selected_parcours = MP
+    => COMP_1, COMP_2, COMP_3, COMP_MP_1
+    """
+
+    if not forest_rows:
+        return set()
+
+    selected = normalize_selected_parcours(selected_parcours)
+
+    all_competences = {
+        row.get("competence_code")
+        for row in forest_rows
+        if row.get("competence_code")
+    }
+
+    if selected == "ALL":
+        return all_competences
+
+    allowed = set()
+
+    for competence_code in all_competences:
+        family, parcours = get_competence_family(competence_code)
+
+        if family == "essential":
+            allowed.add(competence_code)
+
+        elif family == "parcours" and parcours == selected:
+            allowed.add(competence_code)
+
+    return allowed
+
+
+def filter_forest_rows_by_parcours(forest_rows, selected_parcours):
+    """
+    Filtre ForestED au niveau compétence.
+
+    Important :
+    On ne filtre pas ligne par ligne selon module/parcours/UE.
+    On choisit d'abord les compétences visibles,
+    puis on garde toutes les lignes AC/modules liées à ces compétences.
+    """
+
+    if not forest_rows:
+        return []
+
+    allowed_competences = get_allowed_competence_codes_for_parcours(
+        forest_rows,
+        selected_parcours
+    )
+
+    return [
+        row
+        for row in forest_rows
+        if row.get("competence_code") in allowed_competences
+    ]
+
+
+def build_parcours_options(forest_rows, sem="ALL"):
+    """
+    Construit le dropdown parcours à partir des codes compétences.
+
+    Exemple :
+    COMP_MP_1   => MP
+    COMP_MPBS_1 => MPBS
+    COMP_PCLG_1 => PCLG
+
+    Les compétences essentielles COMP_1, COMP_2, COMP_3
+    ne deviennent pas des options, elles sont ajoutées automatiquement.
+    """
+
+    if not forest_rows:
+        return [{"label": "Tous les parcours", "value": "ALL"}]
+
+    if sem not in (None, "ALL"):
+        rows = [
+            row for row in forest_rows
+            if row.get("semestre") == sem
+        ]
+    else:
+        rows = forest_rows
+
+    parcours_values = set()
+
+    for row in rows:
+        competence_code = row.get("competence_code")
+        family, parcours = get_competence_family(competence_code)
+
+        if family == "parcours" and parcours:
+            parcours_values.add(parcours)
+
+    options = [{"label": "Tous les parcours", "value": "ALL"}]
+
+    for parcours in sorted(parcours_values):
+        options.append({
+            "label": parcours,
+            "value": parcours
+        })
+
+    return options
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LAYOUT DASH
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_programme_options():
+    summary = build_programmes_summary(load_processed_files())
+    # Trier : Polytech en premier, BUT ensuite, reste par ordre alpha
+    def _sort_key(item):
+        src = item["source"].lower()
+        if src == "polytech": return 0
+        if src == "but":      return 1
+        return 2
+    return [
+        {"label": f"{i['source']} — {i['programme']}",
+         "value": f"{i['source']}::{i['programme']}"}
+        for i in sorted(summary, key=_sort_key)
+    ]
+
+programme_options = _get_programme_options()
+default_programme = programme_options[0]["value"] if programme_options else None
 
 forested_forest_layout = html.Div([
 
     html.Div([
         html.Div([
-            html.Span(
-                "🌳",
-                style={
-                    "fontSize": "36px",
-                    "marginRight": "12px",
-                    "lineHeight": "1",
-                }
-            ),
-
+            html.Span("🌳", style={"fontSize": "36px", "marginRight": "12px", "lineHeight": "1"}),
             html.Div([
-                html.H1(
-                    "ForestED",
-                    style={
-                        "color": "#0F172A",
-                        "fontSize": "28px",
-                        "fontWeight": "700",
-                        "margin": "0 0 3px",
-                        "letterSpacing": "-0.3px",
-                    }
-                ),
-
-                html.P(
-                    "Forêt pédagogique APC : une compétence est une racine, "
-                    "les niveaux sont les branches principales, les AC sont les branches, "
-                    "les modules sont les feuilles.",
-                    style={
-                        "color": "#64748B",
-                        "fontSize": "13px",
-                        "margin": "0",
-                    }
-                )
-            ])
-        ], style={
-            "display": "flex",
-            "alignItems": "center",
-        })
-    ], style={
-        "marginBottom": "18px",
-    }),
+                html.H1("ForestED", style={"color": "#0F172A", "fontSize": "28px",
+                                            "fontWeight": "700", "margin": "0 0 3px",
+                                            "letterSpacing": "-0.3px"}),
+                html.P("Forêt pédagogique APC — racine (bas) → niveaux → barres AC → modules. "
+                       "Hauteur d'une barre = nombre de modules liés. "
+                       "Cliquez une barre pour voir ses modules.",
+                       style={"color": "#64748B", "fontSize": "13px", "margin": "0"}),
+            ]),
+        ], style={"display": "flex", "alignItems": "center"}),
+    ], style={"marginBottom": "18px"}),
 
     html.Div([
-
         html.Div([
             html.Label("Formation", style=LABEL_STYLE),
-            dcc.Dropdown(
-                id="forested-programme-selector",
-                options=programme_options,
-                value=default_programme,
-                clearable=False,
-                style={"fontSize": "14px"},
-            )
-        ], style={
-            "width": "32%",
-            "minWidth": "260px",
-        }),
+            dcc.Dropdown(id="forested-programme-selector", options=programme_options,
+                         value=None, clearable=False, style={"fontSize": "14px"}),
+        ], style={"width": "28%", "minWidth": "220px"}),
 
         html.Div([
             html.Label("Semestre", style=LABEL_STYLE),
-            dcc.Dropdown(
-                id="forested-semester-selector",
-                options=[{"label": "Tous les semestres", "value": "ALL"}],
-                value="ALL",
-                clearable=False,
-                style={"fontSize": "14px"},
-            )
-        ], style={
-            "width": "20%",
-            "minWidth": "190px",
-        }),
+            dcc.Dropdown(id="forested-semester-selector",
+                         options=[{"label": "Tous les semestres", "value": "ALL"}],
+                         value="ALL", clearable=False, style={"fontSize": "14px"}),
+        ], style={"width": "14%", "minWidth": "150px"}),
+        html.Div([
+        html.Label("Parcours", style=LABEL_STYLE),
+        dcc.Dropdown(
+            id="forested-parcours-selector",
+            options=[{"label": "Tous les parcours", "value": "ALL"}],
+            value="ALL",
+            clearable=False,
+            style={"fontSize": "14px"}
+        ),
+        ], style={"width": "16%", "minWidth": "170px"}),
 
         html.Div([
             html.Label("Compétence", style=LABEL_STYLE),
-            dcc.Dropdown(
-                id="forested-competence-selector",
-                options=[{"label": "Toutes les compétences", "value": "ALL"}],
-                value="ALL",
-                clearable=False,
-                style={"fontSize": "14px"},
-            )
-        ], style={
-            "width": "28%",
-            "minWidth": "250px",
-        }),
+            dcc.Dropdown(id="forested-competence-selector",
+                         options=[{"label": "Toutes les compétences", "value": "ALL"}],
+                         value="ALL", clearable=False, style={"fontSize": "14px"}),
+        ], style={"width": "22%", "minWidth": "200px"}),
 
         html.Div([
-            html.Label("Feuilles / AC", style=LABEL_STYLE),
-            dcc.Dropdown(
-                id="forested-max-modules-selector",
-                options=[
-                    {"label": "4 modules", "value": 4},
-                    {"label": "6 modules", "value": 6},
-                    {"label": "8 modules", "value": 8},
-                    {"label": "12 modules", "value": 12},
-                ],
-                value=MAX_MODULES_DEFAULT,
-                clearable=False,
-                style={"fontSize": "14px"},
-            )
-        ], style={
-            "width": "12%",
-            "minWidth": "130px",
-        }),
-        html.Button(
-    "✕ Réinitialiser",
-    id="forested-reset-selection-button",
-    n_clicks=0,
-    style={
-        "height": "38px",
-        "padding": "0 16px",
-        "borderRadius": "8px",
-        "border": "1px solid #CBD5E1",
-        "backgroundColor": "#F8FAFC",
-        "color": "#0F172A",
-        "fontWeight": "700",
-        "cursor": "pointer",
-    }
-),
+            html.Label("\u00a0", style={**LABEL_STYLE, "visibility": "hidden"}),
+            html.Button("✕ Réinitialiser", id="forested-reset-btn", n_clicks=0,
+                style={"height": "38px", "padding": "0 16px", "borderRadius": "8px",
+                       "border": "1px solid #CBD5E1", "backgroundColor": "#F8FAFC",
+                       "color": "#0F172A", "fontWeight": "700", "cursor": "pointer"}),
+        ], style={"display": "flex", "flexDirection": "column"}),
 
-    ], style={
-        **CARD_STYLE,
-        "display": "flex",
-        "alignItems": "flex-end",
-        "flexWrap": "wrap",
-        "gap": "14px",
-    }),
+    ], style={**CARD_STYLE, "display": "flex", "alignItems": "flex-end",
+               "flexWrap": "wrap", "gap": "14px"}),
 
     html.Div([
-        html.Div([
-            html.Label("Niveaux AC", style=LABEL_STYLE),
-
-            html.Div([
-                html.Span([
-                    html.Span(style={
-                        "width": "10px",
-                        "height": "10px",
-                        "borderRadius": "50%",
-                        "backgroundColor": color,
-                        "display": "inline-block",
-                        "marginRight": "5px",
-                    }),
-                    html.Span(
-                        f"N{key} — {level_label(key)}",
-                        style={
-                            "fontSize": "12px",
-                            "color": "#374151",
-                        }
-                    )
-                ], style={
-                    "display": "flex",
-                    "alignItems": "center",
-                    "marginRight": "16px",
-                })
-                for key, color in NIVEAU_COLORS.items()
-            ], style={
-                "display": "flex",
-                "flexWrap": "wrap",
-                "gap": "4px",
-            })
-        ]),
-
-        html.Div([
-            html.Label("Lecture", style=LABEL_STYLE),
-            html.Div(
-                "Bas → haut : Compétence → Niveau → AC → Modules",
-                style={
-                    "fontSize": "12px",
-                    "color": "#475569",
-                }
-            )
-        ], style={
-            "marginLeft": "28px",
-        }),
-
-    ], style={
-        **CARD_STYLE,
-        "display": "flex",
-        "alignItems": "center",
-        "flexWrap": "wrap",
-        "gap": "12px",
-    }),
-    
+        html.Div(id="forested-legend-div", style={"display": "flex", "alignItems": "center",
+                                                   "flexWrap": "wrap", "gap": "12px"}),
+    ], style={**CARD_STYLE, "display": "flex", "alignItems": "center",
+               "flexWrap": "wrap", "gap": "12px"}),
 
     dcc.Store(id="forested-rows-store"),
-
-    dcc.Store(id="forested-selected-node-store"),
-
+    dcc.Store(id="forested-sel-store"),
     html.Div(id="forested-focus-panel"),
 
     html.Div([
-        dcc.Graph(
-            id="forested-forest-graph",
-            config={
-                "displayModeBar": True,
-                "displaylogo": False,
-                "scrollZoom": True,
-                "modeBarButtonsToRemove": [
-                    "select2d",
-                    "lasso2d",
-                    "autoScale2d",
-                ],
-            }
-        )
-    ], style=CARD_STYLE)
+        dcc.Graph(id="forested-forest-graph",
+            config={"displayModeBar": True, "displaylogo": False, "scrollZoom": True,
+                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"]}),
+    ], style=CARD_STYLE),
 
 ], style=PAGE_STYLE)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CALLBACKS
+#  CALLBACKS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def register_callbacks(app):
 
-
     @app.callback(
-        Output("forested-selected-node-store", "data"),
-        Input("forested-forest-graph", "clickData"),
-        Input("forested-reset-selection-button", "n_clicks"),
-        Input("forested-programme-selector", "value"),
-        Input("forested-semester-selector", "value"),
-        Input("forested-competence-selector", "value"),
-        Input("forested-max-modules-selector", "value"),
-        State("forested-selected-node-store", "data"),
-        prevent_initial_call=True,
+        Output("forested-programme-selector", "value"),
+        Input("forested-programme-selector", "options"),
+        State("forested-programme-selector", "value"),
+        prevent_initial_call=False,
     )
-    def update_selected_node(
-        click_data,
-        reset_clicks,
-        selected_programme,
-        semester_filter,
-        competence_filter,
-        max_modules_per_ac,
-        current_selection,
-    ):
-        from dash import ctx
-
-        triggered_id = ctx.triggered_id
-
-        # Reset si bouton ou changement de filtre
-        if triggered_id in [
-            "forested-reset-selection-button",
-            "forested-programme-selector",
-            "forested-semester-selector",
-            "forested-competence-selector",
-            "forested-max-modules-selector",
-        ]:
-            return None
-
-        selected = parse_click(click_data)
-
-        if not selected:
-            return None
-
-        selected_id = selected.get("id")
-
-        # Deuxième clic sur le même nœud => reset
-        if current_selection and current_selection.get("id") == selected_id:
-            return None
-
-        return selected
+    def init_programme_selector(options, current_value):
+        """Initialise le dropdown au premier programme dispo si aucune valeur."""
+        if current_value is not None:
+            return current_value
+        if options:
+            return options[0]["value"]
+        return None
 
     @app.callback(
         Output("forested-rows-store", "data"),
         Input("forested-programme-selector", "value"),
     )
-    def store_rows(selected_programme):
-        competence_data, curriculum_data = get_selected_data(selected_programme)
-
-        rows = build_visualisation_rows(
-            competence_data,
-            curriculum_data,
-        )
-
+    def store_rows(prog):
+        comp_data, curr_data = get_selected_data(prog)
+        rows = build_visualisation_rows(comp_data, curr_data)
+        if not rows and curr_data:
+            rows = build_rows_from_curriculum(curr_data)
         return build_forest_rows(rows)
 
     @app.callback(
@@ -1392,68 +1361,248 @@ def register_callbacks(app):
         Output("forested-semester-selector", "value"),
         Input("forested-rows-store", "data"),
     )
-    def update_semester_options(stored_rows):
-        if not stored_rows:
+    def update_sem(rows):
+        if not rows:
             return [{"label": "Tous les semestres", "value": "ALL"}], "ALL"
-
-        return build_semester_options(stored_rows), "ALL"
+        return build_semester_options(rows), "ALL"
 
     @app.callback(
-        Output("forested-competence-selector", "options"),
-        Output("forested-competence-selector", "value"),
+        Output("forested-parcours-selector", "options"),
+        Output("forested-parcours-selector", "value"),
         Input("forested-rows-store", "data"),
         Input("forested-semester-selector", "value"),
     )
-    def update_competence_options(stored_rows, semester_filter):
-        if not stored_rows:
+    def update_parcours(rows, sem):
+        """
+        Met à jour la liste des parcours disponibles selon la formation
+        et éventuellement le semestre sélectionné.
+        """
+        if not rows:
+            return [{"label": "Tous les parcours", "value": "ALL"}], "ALL"
+
+        return build_parcours_options(rows, sem), "ALL"
+    
+    @app.callback(
+    Output("forested-competence-selector", "options"),
+    Output("forested-competence-selector", "value"),
+    Input("forested-rows-store", "data"),
+    Input("forested-semester-selector", "value"),
+    Input("forested-parcours-selector", "value"),
+    )
+    def update_comp(rows, sem, parcours):
+        """
+        Met à jour les compétences après application du filtre parcours.
+
+        Exemple :
+        parcours = MP
+        => options compétences = compétences communes + compétences MP.
+        """
+        if not rows:
             return [{"label": "Toutes les compétences", "value": "ALL"}], "ALL"
 
-        return build_competence_options(stored_rows, semester_filter), "ALL"
+        filtered_rows = filter_forest_rows_by_parcours(rows, parcours)
+
+        return build_competence_options(filtered_rows, sem), "ALL"
+
+    @app.callback(
+    Output("forested-sel-store", "data"),
+    Input("forested-forest-graph", "clickData"),
+    Input("forested-reset-btn", "n_clicks"),
+    Input("forested-programme-selector", "value"),
+    Input("forested-semester-selector", "value"),
+    Input("forested-parcours-selector", "value"),
+    Input("forested-competence-selector", "value"),
+    State("forested-sel-store", "data"),
+    prevent_initial_call=True,
+    )
+    def handle_click(click_data, reset, prog, sem, parcours, comp, current):
+        if ctx.triggered_id in (
+            "forested-reset-btn",
+            "forested-programme-selector",
+            "forested-semester-selector",
+            "forested-parcours-selector",
+            "forested-competence-selector"
+        ):
+            return None
+
+        if not click_data:
+            return current
+
+        try:
+            cd = click_data["points"][0].get("customdata")
+
+            if not cd or not isinstance(cd, list) or len(cd) < 2:
+                return None
+
+            sel = {
+                "type": cd[0],
+                "id": cd[1]
+            }
+
+            if current and current.get("type") == sel["type"] and current.get("id") == sel["id"]:
+                return None
+
+            return sel
+
+        except Exception:
+            return None
 
     @app.callback(
     Output("forested-forest-graph", "figure"),
     Input("forested-rows-store", "data"),
     Input("forested-semester-selector", "value"),
+    Input("forested-parcours-selector", "value"),
     Input("forested-competence-selector", "value"),
-    Input("forested-max-modules-selector", "value"),
-    Input("forested-selected-node-store", "data"),
+    Input("forested-sel-store", "data"),
     )
-    def update_figure(
-    stored_rows,
-    semester_filter,
-    competence_filter,
-    max_modules_per_ac,
-    selected_node,
-    ):
-        if not stored_rows:
+    def update_fig(rows, sem, parcours, comp, sel):
+        """
+        Crée la forêt après application du filtre parcours.
+
+        Important :
+        On filtre les lignes avant create_forest_figure.
+        La fonction create_forest_figure reste générique.
+        """
+        if not rows:
             return empty_figure("Aucune donnée disponible")
 
+        filtered_rows = filter_forest_rows_by_parcours(rows, parcours)
+
+        if not filtered_rows:
+            return empty_figure("Aucune donnée pour ce parcours")
+
         return create_forest_figure(
-        forest_rows=stored_rows,
-        semester_filter=semester_filter or "ALL",
-        competence_filter=competence_filter or "ALL",
-        max_modules_per_ac=max_modules_per_ac or MAX_MODULES_DEFAULT,
-        selected_node=selected_node,
+            filtered_rows,
+            sem or "ALL",
+            comp or "ALL",
+            sel
         )
 
     @app.callback(
     Output("forested-focus-panel", "children"),
-    Input("forested-selected-node-store", "data"),
+    Input("forested-sel-store", "data"),
     State("forested-rows-store", "data"),
+    State("forested-semester-selector", "value"),
+    State("forested-parcours-selector", "value"),
+    State("forested-competence-selector", "value"),
     )
-    def update_focus_panel(selected_node, stored_rows):
-        if not stored_rows or not selected_node:
+    def update_panel(sel, rows, sem, parcours, comp):
+        """
+        Met à jour le panneau détail en respectant le filtre parcours.
+        """
+        if not rows or not sel:
             return html.Div()
 
-        fake_click_data = {
-            "points": [
-                {
-                    "customdata": [
-                        selected_node["type"],
-                    selected_node["id"]
-                ]
-            }
-        ]
-        }
+        filtered_rows = filter_forest_rows_by_parcours(rows, parcours)
 
-        return build_focus_panel(stored_rows, fake_click_data)
+        trees = build_trees(
+            filtered_rows,
+            sem or "ALL",
+            comp or "ALL"
+        )
+
+        return build_focus_panel(
+            filtered_rows,
+            sel,
+            trees,
+            sem_filter=sem or "ALL"
+        )
+    @app.callback(
+        Output("forested-legend-div", "children"),
+        Input("forested-rows-store", "data"),
+        Input("forested-semester-selector", "value"),
+        Input("forested-parcours-selector", "value"),
+        Input("forested-competence-selector", "value"),
+    )
+    def update_legend(rows, sem, parcours, comp):
+        """
+        Légende dynamique : affiche uniquement les compétences réellement visibles
+        après application des filtres semestre, parcours et compétence.
+        """
+        if not rows:
+            return []
+
+        rows = filter_forest_rows_by_parcours(rows, parcours)
+
+        if sem not in (None, "ALL"):
+            rows = [
+                r for r in rows
+                if r.get("semestre") == sem
+            ]
+
+        if comp not in (None, "ALL"):
+            rows = [
+                r for r in rows
+                if r.get("competence_code") == comp
+            ]
+
+        all_comps = sorted({
+            r.get("competence_code")
+            for r in rows
+            if r.get("competence_code")
+        })
+
+        comp_badges = []
+
+        for i, cc in enumerate(all_comps):
+            cfg = PALETTE_ESS[i % len(PALETTE_ESS)]
+            fill = cfg["n3_fill"]
+
+            badge_style = {
+                "width": "10px",
+                "height": "10px",
+                "borderRadius": "2px",
+                "backgroundColor": fill,
+                "display": "inline-block",
+                "marginRight": "4px",
+            }
+
+            comp_badges.append(
+                html.Span([
+                    html.Span(style=badge_style),
+                    html.Span(
+                        cc,
+                        style={
+                            "fontSize": "11px",
+                            "color": "#374151"
+                        }
+                    ),
+                ], style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "marginRight": "10px"
+                })
+            )
+
+        return [
+            html.Div([
+                html.Label("Couleurs compétences", style=LABEL_STYLE),
+                html.Div(
+                    comp_badges,
+                    style={
+                        "display": "flex",
+                        "flexWrap": "wrap"
+                    }
+                ),
+            ]),
+            html.Div([
+                html.Label("Niveaux", style=LABEL_STYLE),
+                html.Span(
+                    "N1 pâle → N2 moyen → N3 saturé",
+                    style={
+                        "fontSize": "11px",
+                        "color": "#374151"
+                    }
+                ),
+            ], style={"marginLeft": "20px"}),
+            html.Div([
+                html.Label("Lecture", style=LABEL_STYLE),
+                html.Span(
+                    "Bas → haut : Compétence ◆ → Niveaux ■ → Barres AC",
+                    style={
+                        "fontSize": "11px",
+                        "color": "#475569"
+                    }
+                ),
+            ], style={"marginLeft": "20px"}),
+        ]
