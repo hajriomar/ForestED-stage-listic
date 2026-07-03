@@ -1,0 +1,576 @@
+{
+    "intitule": "Référentiel de compétences Polytech",
+    "sous_classifications": [
+        {
+            "code": "Polytech",
+            "nom": "Polytech",
+            "competences": [
+                {
+                    "code": "COMP_IDU1",
+                    "nom": "Concevoir et mettre en œuvre des systèmes informatiques",
+                    "definition": null,
+                    "composantes_essentielles": [],
+                    "situations_professionnelles": [],
+                    "niveaux_developpement": [
+                        {
+                            "niveau": 1,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU1_N1_AC1",
+                                    "description": "Concevoir, gérer et utiliser une base de données (INFO502 BD, APP : PROJ531)",
+                                    "modules": [
+                                        "INFO502",
+                                        "PROJ531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC2",
+                                    "description": "Concevoir et implémenter une application orientée objet de petite taille (<10classes) (INFO641)",
+                                    "modules": [
+                                        "INFO641"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC3",
+                                    "description": "Résoudre un problème en implémentant un algorithme dans un programme informatique procédural ou objet (INFO501, PROJ631, MATH501)",
+                                    "modules": [
+                                        "INFO501",
+                                        "PROJ631",
+                                        "MATH501"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC4",
+                                    "description": "Mettre en œuvre une architecture client-serveur 3-tiers (INFO632 OS+Virtu)",
+                                    "modules": [
+                                        "INFO632"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC5",
+                                    "description": "Concevoir et implémenter une application web de rendu de données / intégrant une BD (INFO633 Web+BD) ",
+                                    "modules": [
+                                        "INFO633"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC79",
+                                    "description": "Évaluer la consommation énergétique d’un programme (PROJ631) ",
+                                    "modules": [
+                                        "PROJ631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N1_AC83",
+                                    "description": "Évaluer la consommation énergétique d’un programme",
+                                    "modules": []
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 2,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU1_N2_AC7",
+                                    "description": "Définir les caractéristiques techniques et fonctionnelles d'un système N-tiers (INFO833, INFO734_IDU)",
+                                    "modules": [
+                                        "INFO833",
+                                        "INFO734"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N2_AC8",
+                                    "description": "Spécifier et concevoir un logiciel (INFO732)",
+                                    "modules": [
+                                        "INFO732"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N2_AC9",
+                                    "description": "Mettre en œuvre un processus qualité et d’intégration continue dans le développement logiciel (INFO832)",
+                                    "modules": [
+                                        "INFO832"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N2_AC10",
+                                    "description": "Choisir une méthode de développement adaptée (INFO734)",
+                                    "modules": [
+                                        "INFO734"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 3,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU1_N3_AC13",
+                                    "description": "Définir et mettre en œuvre une architecture de système logiciel de données massives (DATA831)\n",
+                                    "modules": [
+                                        "DATA831"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N3_AC14",
+                                    "description": "Caractériser et choisir les solutions logicielles et systèmes adaptés aux besoins (INFO932)",
+                                    "modules": [
+                                        "INFO932"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N3_AC15",
+                                    "description": "S'assurer de la sûreté, la fiabilité et la sécurité du système, du traitement et des données (INFO731)",
+                                    "modules": [
+                                        "INFO731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N3_AC16",
+                                    "description": "Concevoir des applications et architectures multitâches et distribuées (INFO833)",
+                                    "modules": [
+                                        "INFO833"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU1_N3_AC17",
+                                    "description": "Évaluer et optimiser les performances opérationnelles et énergétiques d'un système logiciel (INFO833)",
+                                    "modules": [
+                                        "INFO833"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "code": "COMP_IDU2",
+                    "nom": "Collecter et traiter des données numériques",
+                    "definition": null,
+                    "composantes_essentielles": [],
+                    "situations_professionnelles": [],
+                    "niveaux_developpement": [
+                        {
+                            "niveau": 1,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU2_N1_AC34",
+                                    "description": "Acquérir des données provenant d’Internet (APP : PROJ531)",
+                                    "modules": [
+                                        "PROJ531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N1_AC35",
+                                    "description": "Récupérer des données provenant d’un dépôt de données structurées (INFO502, INFO633)",
+                                    "modules": [
+                                        "INFO502",
+                                        "INFO633"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N1_AC36",
+                                    "description": "Organiser des données selon des structures de graphe  (MATH531 , PROJ631)",
+                                    "modules": [
+                                        "MATH531",
+                                        "PROJ631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N1_AC37",
+                                    "description": "Implémenter des outils mathématiques (MATH501, MATH531, MATH641, PROJ631)",
+                                    "modules": [
+                                        "MATH501",
+                                        "MATH531",
+                                        "MATH641",
+                                        "PROJ631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N1_AC38",
+                                    "description": "Déployer les bases algorithmiques de la logique du 1e ordre et des réseaux de neurones (INFO631)",
+                                    "modules": [
+                                        "INFO631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N1_AC39",
+                                    "description": "Réaliser des rendus visuels (INFO633)",
+                                    "modules": [
+                                        "INFO633"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 2,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU2_N2_AC40",
+                                    "description": "Évaluer la qualité de la donnée (INFO832)",
+                                    "modules": [
+                                        "INFO832"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N2_AC41",
+                                    "description": "Répartir les fonctionnalités (acquisition, stockage, traitements, visualisation...) sur un système N-Tieris (INFO834)",
+                                    "modules": [
+                                        "INFO834"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N2_AC42",
+                                    "description": "Déployer des traitements distribués (INFO743, INFO731)",
+                                    "modules": [
+                                        "INFO743",
+                                        "INFO731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N2_AC43",
+                                    "description": "Choisir et mettre en œuvre des outils d’IA (approches stochastiques, deep learning) pour l’analyse et la prédiction de données (DATA731, MATH741, DATA832, DATA931)",
+                                    "modules": [
+                                        "DATA731",
+                                        "MATH741",
+                                        "DATA832",
+                                        "DATA931"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N2_AC44",
+                                    "description": "Développer des rendus visuels divers, en vue d’une aide à la décision (DATA732, INFO734, INFO831)",
+                                    "modules": [
+                                        "DATA732",
+                                        "INFO734",
+                                        "INFO831"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N2_AC46",
+                                    "description": "Concevoir et mettre en œuvre une base de données NoSQL (INFO834)",
+                                    "modules": [
+                                        "INFO834"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 3,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU2_N3_AC47",
+                                    "description": "Mettre en œuvre des traitements big data (cloud, batch, flux..) (DATA831, INFO932, PROJ832)",
+                                    "modules": [
+                                        "DATA831",
+                                        "INFO932",
+                                        "PROJ832"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N3_AC48",
+                                    "description": "Développer des traitements distribués (INFO833, INFO932)",
+                                    "modules": [
+                                        "INFO833",
+                                        "INFO932"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N3_AC49",
+                                    "description": "Développer des rendus visuels divers, en vue d’une aide à la décision multi-critères (INFO931)",
+                                    "modules": [
+                                        "INFO931"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N3_AC50",
+                                    "description": "Intégrer des solutions issues de la recherche (ISOC931, PROJ901)",
+                                    "modules": [
+                                        "ISOC931",
+                                        "PROJ901"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU2_N3_AC51",
+                                    "description": "Caractériser et choisir une représentation de données et les traitements adaptés dans un contexte de big data (INFO834)",
+                                    "modules": [
+                                        "INFO834"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "code": "COMP_IDU3",
+                    "nom": "Gérer les usages des données numériques en lien avec le client",
+                    "definition": null,
+                    "composantes_essentielles": [],
+                    "situations_professionnelles": [],
+                    "niveaux_developpement": [
+                        {
+                            "niveau": 1,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU3_N1_AC52",
+                                    "description": "Définir, analyser et interpréter les problématiques techniques liées aux problématiques sociétales (ISOC 531)",
+                                    "modules": [
+                                        "ISOC531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N1_AC53",
+                                    "description": "Construire des API de Plateformes numériques (ISOC 631)",
+                                    "modules": [
+                                        "ISOC631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N1_AC54",
+                                    "description": "Concevoir des plateformes numériques centrées sur la donnée s’appuyant sur les effets réseaux  (ISOC 631)",
+                                    "modules": [
+                                        "ISOC631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N1_AC55",
+                                    "description": "Concevoir et réaliser des applications et des systèmes informatiques (ISOC 531, ISOC 631, DDRS501)",
+                                    "modules": [
+                                        "ISOC531",
+                                        "ISOC631",
+                                        "DDRS501"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N1_AC80",
+                                    "description": "Mesurer les impacts sociétaux liés à la production et à la consommation de données (ISOC 531, ISOC 631, ISOC 731)",
+                                    "modules": [
+                                        "ISOC531",
+                                        "ISOC631",
+                                        "ISOC731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N1_AC81",
+                                    "description": "Rédiger des référentiels de conception (ISOC 531, ISOC 631, ISOC 731)",
+                                    "modules": [
+                                        "ISOC531",
+                                        "ISOC631",
+                                        "ISOC731"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 2,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU3_N2_AC56",
+                                    "description": "Concevoir et développer des applications de traitement de données  (INFO731, ISOC 731)",
+                                    "modules": [
+                                        "INFO731",
+                                        "ISOC731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N2_AC57",
+                                    "description": "Assurer le suivi et adapter des systèmes informatiques  (INFO731, INFO832)",
+                                    "modules": [
+                                        "INFO731",
+                                        "INFO832"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N2_AC58",
+                                    "description": "Rédiger un rapport impact socio-techniques sur les utilisateurs (ISOC531, ISOC731)",
+                                    "modules": [
+                                        "ISOC531",
+                                        "ISOC731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N2_AC82",
+                                    "description": "Rédiger un business plan (ISOC731)",
+                                    "modules": [
+                                        "ISOC731"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 3,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU3_N3_AC59",
+                                    "description": "Identifier les risques de sécurité informatique sur les systèmes et les données (fuite de données) (INFO731, PROJ931)",
+                                    "modules": [
+                                        "INFO731",
+                                        "PROJ931"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N3_AC60",
+                                    "description": "Mettre en place les éléments de sécurité et de cryptographie (INFO731, PROJ931)",
+                                    "modules": [
+                                        "INFO731",
+                                        "PROJ931"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N3_AC61",
+                                    "description": "Mettre en place des mécanismes d’intermédiation (INFO731, PROJ931)",
+                                    "modules": [
+                                        "INFO731",
+                                        "PROJ931"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N3_AC62",
+                                    "description": "Évaluer les effets réseaux dans le développement des plateformes numériques (ISOC631)",
+                                    "modules": [
+                                        "ISOC631"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU3_N3_AC63",
+                                    "description": "Cartographier les flux, stockages, sécurisations de la donnée au sein des entreprises (PROJ931)",
+                                    "modules": [
+                                        "PROJ931"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "code": "COMP_IDU4",
+                    "nom": "Gérer un projet informatique",
+                    "definition": null,
+                    "composantes_essentielles": [],
+                    "situations_professionnelles": [],
+                    "niveaux_developpement": [
+                        {
+                            "niveau": 1,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU4_N1_AC64",
+                                    "description": "Définir un projet, ses objectifs, ses acteurs et les outils de gestion de projets (PROJ531)",
+                                    "modules": [
+                                        "PROJ531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N1_AC65",
+                                    "description": "Mettre en œuvre une méthode de gestion de projet informatique et des outils collaboratifs associés (PROJ531)",
+                                    "modules": [
+                                        "PROJ531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N1_AC66",
+                                    "description": "Mettre en œuvre des outils de planification et de suivi de projet  (PROJ531)",
+                                    "modules": [
+                                        "PROJ531"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N1_AC68",
+                                    "description": "Concevoir les bases d'une stratégie d'entreprise (SHES505)",
+                                    "modules": [
+                                        "SHES505"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N1_AC69",
+                                    "description": "Comprendre les lois et réglementations qui régissent leur domaine d'expertise (SHES602)",
+                                    "modules": [
+                                        "SHES602"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 2,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU4_N2_AC67",
+                                    "description": "Évaluer la rentabilité des projets (SHES601)",
+                                    "modules": [
+                                        "SHES601"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC70",
+                                    "description": "Analyser les besoins, identifier les contraintes et élaborer un cahier des charges (INFO731)",
+                                    "modules": [
+                                        "INFO731"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC71",
+                                    "description": "Animer les réunions et organiser le travail (SHES703)",
+                                    "modules": [
+                                        "SHES703"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC72",
+                                    "description": "Évaluer les risques triviaux d'un projet (SHES802)",
+                                    "modules": [
+                                        "SHES802"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC73",
+                                    "description": "Utiliser les techniques de créativité pour apporter des solutions (SHES704)",
+                                    "modules": [
+                                        "SHES704"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC74",
+                                    "description": "Analyser et évaluer les structures et les processus organisationnels (SHES803)",
+                                    "modules": [
+                                        "SHES803"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N2_AC75",
+                                    "description": "Communiquer avec différentes cultures LANGXXX",
+                                    "modules": []
+                                }
+                            ]
+                        },
+                        {
+                            "niveau": 3,
+                            "apprentissages_critiques": [
+                                {
+                                    "code": "COMP_IDU4_N3_AC76",
+                                    "description": "Utiliser des méthodes de management (SHES 901)",
+                                    "modules": [
+                                        "SHES901"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N3_AC77",
+                                    "description": "Manager des équipes projet (gestion des organisations, résistance au changement…) (SHES803, SHES901)",
+                                    "modules": [
+                                        "SHES803",
+                                        "SHES901"
+                                    ]
+                                },
+                                {
+                                    "code": "COMP_IDU4_N3_AC78",
+                                    "description": "Évaluer l'impact du projet en interne et en externe (responsabilité sociétale et environnementale, stratégie de l'entreprise…) (DDRS ???, SHES802)",
+                                    "modules": [
+                                        "SHES802"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
