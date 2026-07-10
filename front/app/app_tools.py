@@ -1,48 +1,70 @@
-import json
-from pathlib import Path
+"""
+app_tools.py — accès aux données et helpers de statistiques.
+
+Les données sont chargées via l'API FastAPI sécurisée, avec le token JWT
+de la session utilisateur OU la clé d'accès invité (dashboard partagé) :
+le backend filtre PAR SOURCE selon les permissions, le frontend ne décide
+de rien.
+
+La signature et le format de retour de load_processed_files() sont
+identiques à la version historique : aucun changement nécessaire dans
+les pages de visualisation.
+"""
+
+import logging
+
+from flask import has_request_context, session
+
+import api_client
+
+logger = logging.getLogger(__name__)
 
 
-PROCESSED_DIR = Path("/data/processed")
-
-
-def read_json_file(path: Path):
-    with open(path, "r", encoding="utf-8") as file:
-        return json.load(file)
+def _empty_datasets():
+    return {"competence": [], "curriculum": []}
 
 
 def extract_programme_from_file_name(file_name: str):
+    """Conservé pour compatibilité : programme informatif depuis le nom."""
     return file_name.split("_")[0].strip()
 
 
 def load_processed_files():
-    result = {
-        "competence": [],
-        "curriculum": []
-    }
+    """Charge les datasets via l'API sécurisée, filtrés par source.
 
-    for domain in result.keys():
-        domain_path = PROCESSED_DIR / domain
+    Fonctionne pour une session utilisateur (JWT) comme pour une session
+    invitée (clé dashboard). Retour identique à l'ancienne lecture disque :
+        {"competence": [{domain, source, programme, file_name, path, data}],
+         "curriculum": [...]}
+    """
+    if not has_request_context():
+        # Import des modules au démarrage du serveur : pas d'utilisateur.
+        return _empty_datasets()
 
-        if not domain_path.exists():
-            continue
+    token = session.get("token")
+    guest_key = session.get("guest_key")
 
-        for source_path in domain_path.iterdir():
-            if not source_path.is_dir():
-                continue
+    if not token and not guest_key:
+        return _empty_datasets()
 
-            for file_path in source_path.glob("*.json"):
-                result[domain].append({
-                    "domain": domain,
-                    "source": source_path.name,
-                    "programme": extract_programme_from_file_name(
-                        file_path.name
-                    ),
-                    "file_name": file_path.name,
-                    "path": str(file_path),
-                    "data": read_json_file(file_path)
-                })
+    try:
+        return api_client.load_processed_files_from_api(
+            token=token, api_key=guest_key,
+        )
 
-    return result
+    except api_client.AuthExpired:
+        logger.info("Session expirée pendant un chargement de données.")
+        for key in ("token", "user", "guest_key", "guest"):
+            session.pop(key, None)
+        return _empty_datasets()
+
+    except api_client.Forbidden as exc:
+        logger.warning("Accès interdit aux données : %s", exc)
+        return _empty_datasets()
+
+    except api_client.ApiUnavailable:
+        logger.error("Backend indisponible pendant un chargement de données.")
+        return _empty_datasets()
 
 
 def build_programmes_summary(datasets):

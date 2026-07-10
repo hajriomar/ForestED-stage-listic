@@ -1,5 +1,16 @@
 """
 Transformer compétences pour les données Polytech.
+
+Structures acceptées par normalize() (logs explicites) :
+1. rows déjà normalisés (sortie de PolytechCompetenceNormalizer) ;
+2. export phpMyAdmin brut (liste, data en position idx 2) ;
+3. enveloppe Excel ("sheets") ;
+4. enveloppe CSV ("rows").
+
+Modules d'un AC :
+- extraction regex depuis le libellé (comportement historique) ;
+- ET champ explicite "code_module" si présent dans la row
+  (nouveau format Polytech : une row par couple AC x module).
 """
 
 import logging
@@ -42,16 +53,44 @@ class PolytechTransformer(BaseTransformer):
     # =====================================================
 
     def normalize(self, raw_data):
+        if self.is_normalized_rows(raw_data):
+            logger.info(
+                "PolytechTransformer : structure détectée = rows déjà "
+                "normalisés (%d rows, normalizer dédié en amont).",
+                len(raw_data),
+            )
+            return raw_data
+
         if self.is_phpmyadmin_json(raw_data):
+            logger.info(
+                "PolytechTransformer : structure détectée = export "
+                "phpMyAdmin brut."
+            )
             return self.normalize_phpmyadmin_json(raw_data)
 
         if self.is_excel_data(raw_data):
+            logger.info(
+                "PolytechTransformer : structure détectée = enveloppe Excel."
+            )
             return self.normalize_excel(raw_data)
 
         if self.is_csv_data(raw_data):
+            logger.info(
+                "PolytechTransformer : structure détectée = enveloppe CSV."
+            )
             return self.normalize_csv(raw_data)
 
         raise ValueError("Structure Polytech competence non reconnue")
+
+    def is_normalized_rows(self, raw_data):
+        """Liste plate de rows au schéma stable (sortie du normalizer)."""
+        return (
+            isinstance(raw_data, list)
+            and len(raw_data) > 0
+            and isinstance(raw_data[0], dict)
+            and "code_competence" in raw_data[0]
+            and "libelle_apprentissage" in raw_data[0]
+        )
 
     def is_phpmyadmin_json(self, raw_data):
         return (
@@ -173,7 +212,7 @@ class PolytechTransformer(BaseTransformer):
             niveau_description = self.clean_value(
             row.get("libelle_niveau")
             )
-            
+
             niveau_obj = self.get_or_create_niveau(
                 competence,
                 niveau,
@@ -189,6 +228,12 @@ class PolytechTransformer(BaseTransformer):
             for module in parsed_modules:
                 if module not in ac_obj.modules:
                     ac_obj.modules.append(module)
+
+            # Lien AC -> module explicite (nouveau format Polytech :
+            # une row par couple AC x module, agrégation par dédup).
+            module_code = self.clean_value(row.get("code_module"))
+            if module_code and module_code not in ac_obj.modules:
+                ac_obj.modules.append(module_code)
 
         sous_classification = SousClassification(
             code="Polytech",

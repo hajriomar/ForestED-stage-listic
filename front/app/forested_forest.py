@@ -8,6 +8,12 @@ from forested_visualisations import (
     build_visualisation_rows,
     empty_figure,
 )
+from forested_curricular_forest import (
+    filter_curricular_rows,
+    filter_curricular_rows_by_click_selection,
+    create_curricular_forest_figure,
+    build_curricular_focus_panel,
+)
 
 try:
     from forested_visualisations import normalize_module_code, iter_curriculum_elements
@@ -1103,43 +1109,64 @@ forested_forest_layout = html.Div([
     ], style={"marginBottom": "18px"}),
 
     html.Div([
-        html.Div([
-            html.Label("Formation", style=LABEL_STYLE),
-            dcc.Dropdown(id="forested-programme-selector", options=programme_options,
-                         value=None, clearable=False, style={"fontSize": "14px"}),
-        ], style={"width": "28%", "minWidth": "220px"}),
 
         html.Div([
-            html.Label("Semestre", style=LABEL_STYLE),
-            dcc.Dropdown(id="forested-semester-selector",
-                         options=[{"label": "Tous les semestres", "value": "ALL"}],
-                         value="ALL", clearable=False, style={"fontSize": "14px"}),
-        ], style={"width": "14%", "minWidth": "150px"}),
+            html.Label("Type de forêt", style=LABEL_STYLE),
+            dcc.RadioItems(
+                id="forest-view-mode",
+                options=[
+                    {"label": " Forêt pédagogique — Compétences → Niveaux → AC",
+                     "value": "competence_forest"},
+                    {"label": " Forêt curriculaire — Semestre → UE → Modules → AC",
+                     "value": "curricular_forest"},
+                ],
+                value="competence_forest",
+                inline=True,
+                labelStyle={"marginRight": "22px", "fontSize": "13px", "color": "#0F172A"},
+                inputStyle={"marginRight": "6px"},
+            ),
+        ], style={"width": "100%", "marginBottom": "14px"}),
 
         html.Div([
-            html.Label("Parcours", style=LABEL_STYLE),
-            dcc.Dropdown(id="forested-parcours-selector",
-                         options=[{"label": "Tous les parcours", "value": "ALL"}],
-                         value="ALL", clearable=False, style={"fontSize": "14px"}),
-        ], style={"width": "16%", "minWidth": "170px"}),
+            html.Div([
+                html.Label("Formation", style=LABEL_STYLE),
+                dcc.Dropdown(id="forested-programme-selector", options=programme_options,
+                             value=None, clearable=False, style={"fontSize": "14px"}),
+            ], style={"width": "28%", "minWidth": "220px"}),
 
-        html.Div([
-            html.Label("Compétence", style=LABEL_STYLE),
-            dcc.Dropdown(id="forested-competence-selector",
-                         options=[{"label": "Toutes les compétences", "value": "ALL"}],
-                         value="ALL", clearable=False, style={"fontSize": "14px"}),
-        ], style={"width": "22%", "minWidth": "200px"}),
+            html.Div([
+                html.Label("Semestre", style=LABEL_STYLE),
+                dcc.Dropdown(id="forested-semester-selector",
+                             options=[{"label": "Tous les semestres", "value": "ALL"}],
+                             value="ALL", clearable=False, style={"fontSize": "14px"}),
+            ], style={"width": "14%", "minWidth": "150px"}),
 
-        html.Div([
-            html.Label(" ", style={**LABEL_STYLE, "visibility": "hidden"}),
-            html.Button("✕ Réinitialiser", id="forested-reset-btn", n_clicks=0,
-                style={"height": "38px", "padding": "0 16px", "borderRadius": "8px",
-                       "border": "1px solid #CBD5E1", "backgroundColor": "#F8FAFC",
-                       "color": "#0F172A", "fontWeight": "700", "cursor": "pointer"}),
-        ], style={"display": "flex", "flexDirection": "column"}),
+            html.Div([
+                html.Label("Parcours", style=LABEL_STYLE),
+                dcc.Dropdown(id="forested-parcours-selector",
+                             options=[{"label": "Tous les parcours", "value": "ALL"}],
+                             value="ALL", clearable=False, style={"fontSize": "14px"}),
+            ], style={"width": "16%", "minWidth": "170px"}),
 
-    ], style={**CARD_STYLE, "display": "flex", "alignItems": "flex-end",
-               "flexWrap": "wrap", "gap": "14px"}),
+            html.Div([
+                html.Label("Compétence", style=LABEL_STYLE),
+                dcc.Dropdown(id="forested-competence-selector",
+                             options=[{"label": "Toutes les compétences", "value": "ALL"}],
+                             value="ALL", clearable=False, style={"fontSize": "14px"}),
+            ], style={"width": "22%", "minWidth": "200px"}),
+
+            html.Div([
+                html.Label(" ", style={**LABEL_STYLE, "visibility": "hidden"}),
+                html.Button("✕ Réinitialiser", id="forested-reset-btn", n_clicks=0,
+                    style={"height": "38px", "padding": "0 16px", "borderRadius": "8px",
+                           "border": "1px solid #CBD5E1", "backgroundColor": "#F8FAFC",
+                           "color": "#0F172A", "fontWeight": "700", "cursor": "pointer"}),
+            ], style={"display": "flex", "flexDirection": "column"}),
+
+        ], style={"display": "flex", "alignItems": "flex-end",
+                   "flexWrap": "wrap", "gap": "14px"}),
+
+    ], style=CARD_STYLE),
 
     html.Div([
         html.Div(id="forested-legend-div", style={"display": "flex", "alignItems": "center",
@@ -1148,8 +1175,11 @@ forested_forest_layout = html.Div([
                "flexWrap": "wrap", "gap": "12px"}),
 
     dcc.Store(id="forested-rows-store"),
+    dcc.Store(id="forested-curricular-rows-store"),
     dcc.Store(id="forested-sel-store"),
+    dcc.Store(id="curricular-selected-node-store"),
     html.Div(id="forested-focus-panel"),
+    html.Div(id="curricular-focus-panel"),
 
     html.Div([
         dcc.Graph(id="forested-forest-graph",
@@ -1181,6 +1211,7 @@ def register_callbacks(app):
 
     @app.callback(
         Output("forested-rows-store", "data"),
+        Output("forested-curricular-rows-store", "data"),
         Input("forested-programme-selector", "value"),
     )
     def store_rows(prog):
@@ -1188,7 +1219,9 @@ def register_callbacks(app):
         rows = build_visualisation_rows(comp_data, curr_data)
         if not rows and curr_data:
             rows = build_rows_from_curriculum(curr_data)
-        return build_forest_rows(rows)
+        # "rows" est réutilisé tel quel pour la forêt curriculaire (elle a besoin
+        # de ue_code/ue_name et des modules sans AC, que build_forest_rows retire).
+        return build_forest_rows(rows), rows
 
     @app.callback(
         Output("forested-semester-selector", "options"),
@@ -1254,14 +1287,102 @@ def register_callbacks(app):
             return None
 
     @app.callback(
+        Output("curricular-selected-node-store", "data"),
+        Input("forested-forest-graph", "clickData"),
+        Input("forested-reset-btn", "n_clicks"),
+        Input("forest-view-mode", "value"),
+        Input("forested-programme-selector", "value"),
+        Input("forested-semester-selector", "value"),
+        Input("forested-parcours-selector", "value"),
+        Input("forested-competence-selector", "value"),
+        State("curricular-selected-node-store", "data"),
+        prevent_initial_call=True,
+    )
+    def handle_curricular_click(click_data, reset, view_mode, prog, sem, parcours, comp, current):
+        # Callback dédié à la forêt curriculaire : le schéma customdata
+        # ({"type","id","semester","ue_code","module_code","ac_code"}, un
+        # dict) est différent de celui de la forêt pédagogique ci-dessus
+        # (une liste ["comp"/"niv"/"bar", id]) — on ne réutilise donc pas
+        # handle_click, pour ne jamais mélanger les deux schémas de sélection.
+        if ctx.triggered_id in ("forested-reset-btn", "forest-view-mode",
+                                "forested-programme-selector", "forested-semester-selector",
+                                "forested-parcours-selector", "forested-competence-selector"):
+            return None
+        if view_mode != "curricular_forest":
+            return current
+        if not click_data:
+            return current
+        try:
+            cd = click_data["points"][0].get("customdata")
+            if not cd or not isinstance(cd, dict) or not cd.get("type"):
+                return None
+            if current and current.get("type") == cd.get("type") and current.get("id") == cd.get("id"):
+                return None
+            return cd
+        except Exception:
+            return None
+
+    @app.callback(
     Output("forested-forest-graph", "figure"),
     Input("forested-rows-store", "data"),
+    Input("forested-curricular-rows-store", "data"),
+    Input("forest-view-mode", "value"),
     Input("forested-semester-selector", "value"),
     Input("forested-parcours-selector", "value"),
     Input("forested-competence-selector", "value"),
     Input("forested-sel-store", "data"),
+    Input("curricular-selected-node-store", "data"),
     )
-    def update_fig(rows, sem, parcours, comp, sel):
+    def update_fig(rows, curricular_rows, view_mode, sem, parcours, comp, sel, curricular_sel):
+
+        # ── Forêt curriculaire : Semestre → UE → Module → AC ────────────────
+        # Logique déléguée à forested_curricular_forest.py (fichier dédié).
+        # Branche indépendante : n'affecte jamais la logique pédagogique
+        # ci-dessous, qui reste strictement inchangée.
+        if view_mode == "curricular_forest":
+            if not curricular_rows:
+                return empty_figure("Aucune donnée disponible pour cette formation.")
+
+            # Filtre Parcours (v4 — audit + correctif demandés) : on réutilise
+            # EXACTEMENT le mécanisme déjà prouvé fonctionnel côté forêt
+            # pédagogique (filter_forest_rows_by_parcours), au lieu d'une
+            # logique dupliquée et hypothétique sur des noms de champs
+            # jamais confirmés côté forêt curriculaire (v7/v8 dans
+            # forested_curricular_forest.py, sans effet observé).
+            #
+            # Les lignes "module sans AC" (pas de competence_code) n'ont par
+            # construction rien à évaluer avec cette convention : on les
+            # sépare des lignes AC, on ne filtre que les lignes AC, puis on
+            # recombine — pour ne pas faire disparaître un module simplement
+            # parce qu'il n'a pas encore d'AC rattaché.
+            raw_rows = curricular_rows or []
+            if parcours not in (None, "ALL"):
+                ac_rows = [r for r in raw_rows if r.get("competence_code")]
+                module_only_rows = [r for r in raw_rows if not r.get("competence_code")]
+                filtered_ac_rows = filter_forest_rows_by_parcours(ac_rows, parcours)
+                rows_after_parcours = filtered_ac_rows + module_only_rows
+            else:
+                rows_after_parcours = raw_rows
+
+            filtered_curricular_rows = filter_curricular_rows(
+                rows_after_parcours,
+                sem_filter=sem or "ALL",
+                parcours_filter="ALL",   # déjà appliqué ci-dessus, ne pas refiltrer
+                comp_filter=comp or "ALL",
+            )
+            if not filtered_curricular_rows:
+                return empty_figure("Aucune donnée pour ce filtre")
+
+            if curricular_sel:
+                focus_rows = filter_curricular_rows_by_click_selection(
+                    filtered_curricular_rows, curricular_sel
+                )
+                if focus_rows:
+                    return create_curricular_forest_figure(focus_rows, selected=curricular_sel)
+
+            return create_curricular_forest_figure(filtered_curricular_rows, selected=None)
+
+        # ── Forêt pédagogique (comportement historique, strictement inchangé) ──
         if not rows:
             return empty_figure("Aucune donnée disponible")
 
@@ -1319,6 +1440,42 @@ def register_callbacks(app):
         filtered_rows = filter_forest_rows_by_parcours(rows, parcours)
         trees = build_trees(filtered_rows, sem or "ALL", comp or "ALL")
         return build_focus_panel(filtered_rows, sel, trees, sem_filter=sem or "ALL")
+
+    @app.callback(
+        Output("curricular-focus-panel", "children"),
+        Input("curricular-selected-node-store", "data"),
+        State("forested-curricular-rows-store", "data"),
+        State("forested-semester-selector", "value"),
+        State("forested-parcours-selector", "value"),
+        State("forested-competence-selector", "value"),
+    )
+    def update_curricular_panel(sel, rows, sem, parcours, comp):
+        if not rows or not sel:
+            return html.Div()
+        raw_rows = rows or []
+        if parcours not in (None, "ALL"):
+            ac_rows = [r for r in raw_rows if r.get("competence_code")]
+            module_only_rows = [r for r in raw_rows if not r.get("competence_code")]
+            filtered_ac_rows = filter_forest_rows_by_parcours(ac_rows, parcours)
+            rows_after_parcours = filtered_ac_rows + module_only_rows
+        else:
+            rows_after_parcours = raw_rows
+        filtered_rows = filter_curricular_rows(rows_after_parcours, sem or "ALL", "ALL", comp or "ALL")
+        return build_curricular_focus_panel(filtered_rows, sel)
+
+    @app.callback(
+        Output("forested-focus-panel", "style"),
+        Output("curricular-focus-panel", "style"),
+        Input("forest-view-mode", "value"),
+    )
+    def toggle_focus_panels(view_mode):
+        # Callback purement additif : n'affecte ni les données ni la logique
+        # des deux panneaux, seulement leur visibilité, pour éviter qu'un
+        # panneau pédagogique resté "chaud" ne s'affiche pendant qu'on
+        # regarde la forêt curriculaire (et inversement).
+        if view_mode == "curricular_forest":
+            return {"display": "none"}, {}
+        return {}, {"display": "none"}
 
     @app.callback(
         Output("forested-legend-div", "children"),

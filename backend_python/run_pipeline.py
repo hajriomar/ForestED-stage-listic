@@ -21,6 +21,9 @@ from app.etl.pipeline import (
 
 DOMAINS = ["competence", "curriculum"]
 
+# Extensions supportées par ExtractorFactory
+ALLOWED_EXTENSIONS = {".json", ".xlsx", ".xls", ".csv"}
+
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure les logs du pipeline."""
@@ -69,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     file_parser = subparsers.add_parser(
         "run-file",
-        help="Traiter un seul fichier JSON",
+        help="Traiter un seul fichier (json, xlsx, xls, csv)",
     )
     file_parser.add_argument(
         "domain",
@@ -77,24 +80,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Domaine du fichier",
     )
     file_parser.add_argument(
+        "source_name",
+        help="Source du fichier (but, polytech, …)",
+    )
+    file_parser.add_argument(
         "file_path",
         type=Path,
-        help="Chemin vers le fichier JSON",
+        help="Chemin vers le fichier source",
     )
 
     return parser
 
 
 def validate_file(file_path: Path) -> None:
-    """Vérifie que le fichier existe et qu'il est bien un JSON."""
+    """Vérifie que le fichier existe et que son format est supporté."""
     if not file_path.exists():
         raise FileNotFoundError(f"Fichier introuvable : {file_path}")
 
     if not file_path.is_file():
         raise ValueError(f"Le chemin n'est pas un fichier : {file_path}")
 
-    if file_path.suffix.lower() != ".json":
-        raise ValueError(f"Le fichier doit être au format JSON : {file_path}")
+    if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise ValueError(
+            f"Format non supporté : {file_path.suffix} "
+            f"(formats acceptés : {', '.join(sorted(ALLOWED_EXTENSIONS))})"
+        )
 
 
 def main() -> int:
@@ -118,8 +128,11 @@ def main() -> int:
 
         elif args.command == "run-file":
             validate_file(args.file_path)
-            logger.info("Traitement du fichier : %s", args.file_path)
-            process_file(args.domain, args.file_path)
+            logger.info(
+                "Traitement du fichier : %s (%s/%s)",
+                args.file_path, args.domain, args.source_name,
+            )
+            process_file(args.domain, args.source_name, args.file_path)
             logger.info("Fichier traité avec succès")
 
         return 0
