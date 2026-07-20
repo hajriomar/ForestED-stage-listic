@@ -17,10 +17,28 @@ Programme
                         -> RessourcePedagogique
                         -> Evaluation
                         -> Enseignant
+
+Notion transverse (optionnelle, backward-compatible) :
+
+Institution (type="institution")
+    -> InstitutionDiplomante (type="diplomante")
+    -> InstitutionMobilite (type="mobilite")
+
+Un Programme et un ElementPedagogique peuvent référencer zéro ou plusieurs
+institutions (champ `institutions`, liste vide par défaut). Le champ `type`
+(Literal) sert de discriminant : il est sérialisé dans les JSON et permet de
+retrouver le sous-type exact au rechargement. Aucune source existante (BUT,
+Polytech, USMB) ne renseigne ce champ : il est prévu pour les sources
+multi-établissements (ex. UNITA : institution diplômante vs institutions de
+mobilité).
+
+Ordre du Union volontaire : `Institution` en premier. Une entrée sans champ
+`type` (dict brut incomplet) doit rester une institution générique plutôt que
+d'être supposée diplômante ou de mobilité par défaut.
 """
 
 from abc import ABC
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import (
     BaseModel,
@@ -35,6 +53,19 @@ class StrictBaseModel(BaseModel):
     model_config = {
         "extra": "forbid"
     }
+
+
+class Institution(StrictBaseModel):
+    nom: str
+    type: Literal["institution"] = "institution"
+
+
+class InstitutionDiplomante(Institution):
+    type: Literal["diplomante"] = "diplomante"
+
+
+class InstitutionMobilite(Institution):
+    type: Literal["mobilite"] = "mobilite"
 
 
 class RessourcePedagogique(StrictBaseModel):
@@ -90,7 +121,10 @@ class ElementPedagogique(StrictBaseModel, ABC):
 
     acquis_apprentissage: List[AcquisApprentissage] = Field(default_factory=list)
     enseignants: List[Enseignant] = Field(default_factory=list)
-    
+    institutions: List[
+        Union[Institution, InstitutionDiplomante, InstitutionMobilite]
+    ] = Field(default_factory=list)
+
     @field_validator("credits", "volume_total")
     @classmethod
     def validate_positive_values(cls, v):
@@ -192,7 +226,6 @@ class GroupeElementsPedagogiquesComposite(
 
 
 
-
 class PeriodeProgramme(StrictBaseModel):
     id: str
     numero: int
@@ -221,6 +254,9 @@ class Programme(StrictBaseModel):
     duree: int = 0
 
     periodes: List[PeriodeProgramme] = Field(default_factory=list)
+    institutions: List[
+        Union[Institution, InstitutionDiplomante, InstitutionMobilite]
+    ] = Field(default_factory=list)
 
     @field_validator("ects_total", "duree")
     @classmethod
