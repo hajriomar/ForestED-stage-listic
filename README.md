@@ -1,281 +1,75 @@
-# ForestED 
+# ForestED
 
-## Présentation du projet
+**Plateforme de visualisation de curricula orientés compétences (APC).**
 
-ForestED est un projet de transformation et de structuration de données pédagogiques académiques.
+ForestED ingère des référentiels de compétences et des maquettes pédagogiques
+(exports Excel, JSON, CSV, API), les normalise vers un méta-modèle commun,
+et les restitue sous forme de visualisations interactives : forêt pédagogique
+(Compétence → Niveaux → Apprentissages Critiques), forêt curriculaire
+(Semestre → UE → Modules → AC), cartographie APC, exploration circulaire.
+L'accès aux données est contrôlé **par source**, pour des utilisateurs
+authentifiés comme pour des clients techniques (clés API) et des dashboards
+partagés en lecture seule.
 
-L’objectif principal est de construire un pipeline ETL capable de :
+## Stack technique
 
-* extraire des données pédagogiques provenant de différentes sources,
-* transformer ces données vers des méta-modèles canoniques communs,
-* générer des formats exploitables pour l’analyse, la visualisation et les outils BI.
+| Couche | Technologie |
+|---|---|
+| Backend / API | FastAPI — API versionnée `/api/v1` |
+| Frontend | Dash (Flask) — session par cookie signé |
+| Authentification | JWT (utilisateurs) · `X-API-Key` (clients techniques) |
+| Base d'authentification | PostgreSQL 16 · migrations Alembic |
+| Données pédagogiques | Fichiers `processed/` + `analytics/` (jamais en base SQL) |
+| ETL | Extract → Normalize → Transform → Load, registry déclarative |
+| Exécution locale | Docker Compose |
+| Déploiement serveur (préparé) | Caddy HTTPS via `docker-compose.prod.yml` |
 
-Le projet a été conçu autour d’une architecture générique et extensible afin de supporter plusieurs établissements ou référentiels pédagogiques.
+## Architecture en une phrase
 
----
-
-# Objectifs du projet
-
-Le pipeline ETL permet de :
-
-* centraliser plusieurs sources de données académiques,
-* normaliser les structures hétérogènes,
-* respecter un méta-modèle métier commun,
-* produire une représentation canonique unifiée,
-* générer des données analytiques simplifiées,
-* préparer les données pour des usages IA, RAG, analytics ou visualisation.
-
----
-
-# Architecture générale
-
-Le pipeline suit une architecture ETL classique :
-
-1. Extraction des données JSON brutes
-2. Sélection automatique du transformer
-3. Transformation métier vers le méta-modèle
-4. Génération des outputs canonical et flat
-5. Sauvegarde des résultats
-
-L’architecture repose sur un système de transformers spécialisés sélectionnés automatiquement grâce au Factory Pattern.
-
----
-
-# Structure du projet
-
-```text
-app/
-│
-├── data/
-│   ├── raw/
-│   │   ├── competence/
-│   │   │   └── Polytech/
-│   │   └── curriculum/
-│   │       └── Polytech/
-│   │
-│   ├── processed/
-│   │
-│   └── analytics/
-│
-├── etl/
-│   ├── extract/
-│   ├── transform/
-│   ├── load/
-│   └── pipeline.py
-│
-├── models/
-│   ├── competency_models.py
-│   └── curriculum_models.py
+```
+Navigateur ──► Dash :8050 ──► FastAPI /api/v1 ──► PostgreSQL (auth)
+                                        └───────► fichiers processed/analytics (ETL)
 ```
 
----
+Deux domaines de données strictement séparés : **competence** (référentiels)
+et **curriculum** (maquettes) — voir [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md).
 
-# Organisation des données
-
-Les données brutes sont organisées selon :
-
-* le domaine :
-
-  * competence
-  * curriculum
-
-* la source :
-
-  * Polytech
-  * futures sources (BUT, autres écoles, etc.)
-
-Cette organisation permet au pipeline de détecter automatiquement la provenance des données et de sélectionner le transformer adapté.
-
----
-
-# Meta-models
-
-Le projet repose sur deux méta-modèles principaux :
-
-## 1. Meta-model compétences
-
-Structure hiérarchique :
-
-```text
-ReferentielCompetences
-    └── SousClassification
-            └── Competence
-                    └── NiveauDeveloppement
-                            └── ApprentissageCritique
-```
-
-Ce modèle permet de représenter :
-
-* les compétences,
-* les niveaux de développement,
-* les apprentissages critiques,
-* les modules associés.
-
----
-
-## 2. Meta-model curriculum
-
-Structure hiérarchique :
-
-```text
-Programme
-    └── PeriodeProgramme
-            └── UniteEnseignement
-                    └── ElementPedagogique
-```
-
-Le modèle curriculum contient également :
-
-* les acquis d’apprentissage,
-* les ressources pédagogiques,
-* les activités pédagogiques,
-* les évaluations,
-* les enseignants.
-
----
-
-# Factory Pattern
-
-Le projet utilise un Factory Pattern afin de sélectionner automatiquement le transformer adapté selon :
-
-* le domaine,
-* la source des données.
-
-Exemple :
-
-```python
-TransformerFactory.get_transformer(
-    domain="competence",
-    source_name="Polytech"
-)
-```
-
-Cette architecture permet d’ajouter facilement :
-
-* de nouveaux transformers,
-* de nouvelles sources,
-* de nouveaux référentiels.
-
----
-
-# Outputs générés
-
-Chaque transformer produit deux formats :
-
-## 1. Canonical JSON
-
-Structure complète respectant le méta-modèle métier.
-
-Utilisée pour :
-
-* la normalisation,
-* l’interopérabilité,
-* les traitements IA,
-* les graphes de connaissances.
-
----
-
-## 2. Flat JSON
-
-Structure simplifiée destinée à :
-
-* l’analyse,
-* les dashboards,
-* la BI,
-* les exports tabulaires.
-
----
-
-# Fonctionnalités principales
-
-Le pipeline implémente plusieurs règles métier :
-
-* extraction automatique des modules depuis le texte,
-* normalisation des codes modules,
-* détection automatique des semestres,
-* gestion des modules transverses,
-* déduplication des enseignants,
-* calcul automatique des volumes horaires,
-* validation des données via Pydantic.
-
----
-
-# Technologies utilisées
-
-* Python
-* Pydantic
-* JSON
-* Logging
-* Regex
-* Architecture ETL
-* Factory Pattern
-
----
-
-# Validation des données
-
-Les modèles Pydantic sont utilisés afin de :
-
-* valider les structures,
-* garantir la conformité au méta-modèle,
-* empêcher les champs invalides,
-* sécuriser les transformations.
-
----
-
-# Logging
-
-Le pipeline utilise un système de logging centralisé permettant de suivre :
-
-* l’extraction,
-* les transformations,
-* les erreurs,
-* les fichiers générés,
-* les problèmes de données.
-
----
-
-# Extensibilité
-
-L’architecture a été conçue pour supporter facilement :
-
-* de nouvelles sources académiques,
-* de nouveaux formats de données,
-* de nouveaux transformers,
-* de nouveaux méta-modèles.
-
-Pour ajouter une nouvelle source :
-
-1. Créer un dossier dans `data/raw`
-2. Créer le transformer correspondant
-3. L’ajouter dans `TransformerFactory`
-
-Aucune modification du pipeline principal n’est nécessaire.
-
----
-
-# Exécution du pipeline
-
-Lancer le pipeline :
+## Démarrage rapide
 
 ```bash
-python -m app.etl.pipeline
+docker compose up -d                                             # tout démarrer
+docker exec -it forested_backend python -m pytest tests/ -q     # suite de tests
+docker exec -it forested_backend alembic current                # 0001_baseline (head)
 ```
 
----
+URLs locales :
 
-# Résultats générés
+- Dashboard : <http://127.0.0.1:8050>
+- Swagger (dev uniquement) : <http://127.0.0.1:8000/docs>
+- Healthcheck : <http://127.0.0.1:8000/health>
 
-Les outputs sont automatiquement sauvegardés dans :
+> ⚠️ `docker compose up -d --build` uniquement si `requirements.txt` ou un
+> `Dockerfile` a changé. Le fichier `docker-compose.prod.yml` est réservé au
+> serveur — ne jamais le lancer en local (voir
+> [docs/07_DEPLOIEMENT_PRODUCTION.md](docs/07_DEPLOIEMENT_PRODUCTION.md)).
 
-```text
-app/data/processed/
-```
+## Documentation
 
-et :
+| Fichier | Contenu |
+|---|---|
+| [docs/01_ARCHITECTURE.md](docs/01_ARCHITECTURE.md) | Composants, domaines competence/curriculum, permissions, registry ETL |
+| [docs/02_INSTALLATION_LOCALE.md](docs/02_INSTALLATION_LOCALE.md) | Prérequis, démarrage, vérifications, PostgreSQL/Alembic |
+| [docs/03_UTILISATION.md](docs/03_UTILISATION.md) | Pages du dashboard, filtres, les deux forêts, limites du curriculum-lite |
+| [docs/04_ADMINISTRATION.md](docs/04_ADMINISTRATION.md) | Utilisateurs, permissions, clés API, upload, import API, pipeline |
+| [docs/05_API_CLIENT.md](docs/05_API_CLIENT.md) | Utiliser l'API avec une clé — endpoints, exemples curl/Python |
+| [docs/06_ETL_DEVELOPER_GUIDE.md](docs/06_ETL_DEVELOPER_GUIDE.md) | Ajouter une source : extractor/normalizer/transformer, contrats R4 |
+| [docs/07_DEPLOIEMENT_PRODUCTION.md](docs/07_DEPLOIEMENT_PRODUCTION.md) | Déploiement serveur avec Caddy (préparé, dormant) |
+| [docs/08_TROUBLESHOOTING.md](docs/08_TROUBLESHOOTING.md) | Problèmes rencontrés et solutions |
+| [docs/09_PROJECT_STATUS.md](docs/09_PROJECT_STATUS.md) | État du projet, sources en production, reste à faire |
 
-```text
-app/data/analytics/
-```
+## Statut actuel
 
----
+**Plateforme fonctionnelle en local** : 3 sources chargées (BUT, Polytech,
+usmb_licence) sur les deux domaines, administration complète, 219 tests verts.
+Le déploiement serveur (Caddy HTTPS) est **prêt côté applicatif mais dormant**
+jusqu'à disposer d'un vrai serveur et d'un nom de domaine.
