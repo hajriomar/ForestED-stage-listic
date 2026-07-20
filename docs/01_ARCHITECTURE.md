@@ -68,7 +68,8 @@ ReferentielCompetences → SousClassification → Compétence
 
 Les AC peuvent porter des **références** vers des modules via `ac.modules` :
 une liste de **codes** (chaînes), jamais des objets modules complets. C'est la
-clé de jointure avec le curriculum (pattern identique au standard 1EdTech CASE).
+clé de jointure avec le curriculum (pattern cohérent avec les standards
+d'alignement compétences ↔ cours, comme 1EdTech CASE).
 
 **Domaine `curriculum`** (modèles : `app/models/curriculum_models.py`) :
 

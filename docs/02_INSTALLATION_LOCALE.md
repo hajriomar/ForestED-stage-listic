@@ -90,6 +90,6 @@ FLASK_SECRET_KEY=...           # optionnel en dev
 docker exec -it forested_backend python -m pytest tests/ -q
 ```
 
-Attendu : **219 tests verts**. Les tests utilisent une base SQLite dédiée
+Attendu : **219/219 tests verts**. Les tests utilisent une base SQLite dédiée
 (isolée par `tests/conftest.py`) — ils ne touchent jamais à PostgreSQL ni aux
 données réelles.

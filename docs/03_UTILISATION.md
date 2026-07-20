@@ -19,8 +19,7 @@ visualisations, en lecture seule, sans login.
 | **Parcours** | Visualisation orientée parcours. |
 | **Administration** | Visible uniquement pour le rôle admin — voir [04_ADMINISTRATION.md](04_ADMINISTRATION.md). |
 
-*(Les intitulés exacts des pages correspondent à la barre de navigation ;
-« à vérifier » en cas d'évolution du frontend.)*
+*(Les intitulés correspondent à la barre de navigation actuelle du frontend.)*
 
 ## Filtres
 

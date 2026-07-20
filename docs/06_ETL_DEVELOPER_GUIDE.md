@@ -104,9 +104,9 @@ en 422 à l'admin). Côté normalizers, une source sans entrée reçoit un
   ignorées, parcours par bandes de période (Droit) et par nom de feuille
   (STAPS `* L3`), bornage des lignes fantômes, MATH hors gabarit → erreur
   claire.
-- La séparation des domaines est verrouillée par des tests dédiés
-  (`tests/test_usmb_domain_separation.py` — à vérifier qu'il est bien présent
-  dans `tests/`).
+- Un fichier de tests dédié (`test_usmb_domain_separation.py`, 8 tests de
+  séparation stricte des domaines) a été livré ; il n'est **pas encore ajouté**
+  à `tests/`. Une fois copié, la suite passe de 219 à 227 tests.
 
 ## Règles d'or
 

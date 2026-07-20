@@ -70,6 +70,7 @@ URLs locales :
 ## Statut actuel
 
 **Plateforme fonctionnelle en local** : 3 sources chargées (BUT, Polytech,
-usmb_licence) sur les deux domaines, administration complète, 219 tests verts.
+usmb_licence) sur les deux domaines, administration complète, **219/219 tests
+verts**.
 Le déploiement serveur (Caddy HTTPS) est **prêt côté applicatif mais dormant**
 jusqu'à disposer d'un vrai serveur et d'un nom de domaine.
