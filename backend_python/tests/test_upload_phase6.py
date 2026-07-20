@@ -93,7 +93,7 @@ def setup_db():
 
 
 def get_headers(username="admin"):
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": username, "password": PASSWORD})
     assert r.status_code == 200
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
@@ -102,7 +102,7 @@ def get_headers(username="admin"):
 def do_upload(headers=None, domain="competence", source="Polytech",
               formation="SNI", filename="referentiel.json", content=None):
     return client.post(
-        "/admin/sources/upload",
+        "/api/v1/admin/sources/upload",
         data={"domain": domain, "source_name": source,
               "formation_name": formation},
         files={"file": (filename,
@@ -174,7 +174,7 @@ def test_viewer_forbidden():
 
 def test_api_key_forbidden():
     created = client.post(
-        "/admin/api-keys",
+        "/api/v1/admin/api-keys",
         json={"name": "cle", "permissions": [
             {"source_name": "*", "scopes": ["*"]}]},
         headers=get_headers(),

@@ -15,6 +15,19 @@ ANALYTICS_DATA_FOLDER = os.getenv("ANALYTICS_DATA_FOLDER", str(DATA_DIR / "analy
 # Application
 APP_NAME = os.getenv("APP_NAME", "ForestED Backend")
 APP_ENV = os.getenv("APP_ENV", "development")
+IS_PRODUCTION = APP_ENV == "production"
+
+# Hôtes autorisés (TrustedHostMiddleware — Patch A).
+# En production : TRUSTED_HOSTS=api.mondomaine.fr,app.mondomaine.fr
+# Les hosts INTERNES (localhost, 127.0.0.1, backend — appels Dash->backend
+# et healthchecks Docker, plus "testserver" pour pytest) sont TOUJOURS
+# ajoutés à la liste : les oublier dans TRUSTED_HOSTS casserait le
+# dashboard en production sans que rien ne le signale.
+_INTERNAL_HOSTS = ["localhost", "127.0.0.1", "backend", "testserver"]
+_env_hosts = [h.strip() for h in os.getenv("TRUSTED_HOSTS", "").split(",")
+              if h.strip()]
+TRUSTED_HOSTS = _env_hosts + [h for h in _INTERNAL_HOSTS
+                              if h not in _env_hosts]
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

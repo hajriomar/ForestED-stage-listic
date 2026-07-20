@@ -82,7 +82,7 @@ def setup_db():
 
 
 def get_token(username):
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": username, "password": PASSWORD})
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
@@ -96,7 +96,7 @@ def create_key(name="cle-test", permissions=None, expires_in_days=None):
     payload = {"name": name, "permissions": permissions or []}
     if expires_in_days is not None:
         payload["expires_in_days"] = expires_in_days
-    r = client.post("/admin/api-keys", json=payload, headers=admin_headers())
+    r = client.post("/api/v1/admin/api-keys", json=payload, headers=admin_headers())
     assert r.status_code == 201, r.text
     return r.json()
 
@@ -131,7 +131,7 @@ def test_created_key_not_stored_in_plain():
 
 def test_listing_never_shows_plain_key():
     create_key(name="cle-listing")
-    r = client.get("/admin/api-keys", headers=admin_headers())
+    r = client.get("/api/v1/admin/api-keys", headers=admin_headers())
     assert r.status_code == 200
     for item in r.json():
         assert "api_key" not in item
@@ -149,7 +149,7 @@ def test_api_key_valid_accepted_and_filtered():
         permissions=[{"source_name": "Polytech",
                       "scopes": ["read:competence"]}],
     )
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": created["api_key"]})
     assert r.status_code == 200
     assert sources_of(r) == ["Polytech"]  # jamais BUT
@@ -160,7 +160,7 @@ def test_api_key_wildcard_sees_everything():
         name="cle-star",
         permissions=[{"source_name": "*", "scopes": ["*"]}],
     )
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": created["api_key"]})
     assert sources_of(r) == ["BUT", "Polytech"]
 
@@ -171,7 +171,7 @@ def test_api_key_missing_scope_refused():
         permissions=[{"source_name": "BUT",
                       "scopes": ["read:curriculum"]}],
     )
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": created["api_key"]})
     assert r.status_code == 200
     assert r.json()["status"] == "empty"
@@ -179,13 +179,13 @@ def test_api_key_missing_scope_refused():
 
 def test_api_key_without_permissions_sees_nothing():
     created = create_key(name="cle-vide")
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": created["api_key"]})
     assert r.json()["status"] == "empty"
 
 
 def test_unknown_api_key_rejected():
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": "fed_cle_inventee_12345"})
     assert r.status_code == 401
 
@@ -194,12 +194,12 @@ def test_revoked_api_key_rejected():
     created = create_key(name="cle-a-revoquer",
                          permissions=[{"source_name": "*", "scopes": ["*"]}])
 
-    r = client.delete(f"/admin/api-keys/{created['id']}",
+    r = client.delete(f"/api/v1/admin/api-keys/{created['id']}",
                       headers=admin_headers())
     assert r.status_code == 200
     assert r.json()["status"] == "revoked"
 
-    r = client.get("/competences",
+    r = client.get("/api/v1/competences",
                    headers={"X-API-Key": created["api_key"]})
     assert r.status_code == 401
     assert "revoked" in r.json()["detail"].lower()
@@ -224,7 +224,7 @@ def test_expired_api_key_rejected():
     db.commit()
     db.close()
 
-    r = client.get("/competences", headers={"X-API-Key": full})
+    r = client.get("/api/v1/competences", headers={"X-API-Key": full})
     assert r.status_code == 401
     assert "expired" in r.json()["detail"].lower()
 
@@ -232,7 +232,7 @@ def test_expired_api_key_rejected():
 def test_last_used_at_updated():
     created = create_key(name="cle-usage",
                          permissions=[{"source_name": "*", "scopes": ["*"]}])
-    client.get("/competences", headers={"X-API-Key": created["api_key"]})
+    client.get("/api/v1/competences", headers={"X-API-Key": created["api_key"]})
 
     db = SessionLocal()
     row = db.get(ApiKey, created["id"])
@@ -246,7 +246,7 @@ def test_last_used_at_updated():
 
 def test_viewer_cannot_create_key():
     r = client.post(
-        "/admin/api-keys",
+        "/api/v1/admin/api-keys",
         json={"name": "interdit"},
         headers={"Authorization": f"Bearer {get_token('viewer')}"},
     )
@@ -254,12 +254,12 @@ def test_viewer_cannot_create_key():
 
 
 def test_create_key_requires_auth():
-    assert client.post("/admin/api-keys", json={"name": "x"}).status_code == 401
+    assert client.post("/api/v1/admin/api-keys", json={"name": "x"}).status_code == 401
 
 
 def test_unknown_scope_rejected_at_creation():
     r = client.post(
-        "/admin/api-keys",
+        "/api/v1/admin/api-keys",
         json={"name": "cle-scope-inconnu",
               "permissions": [{"source_name": "BUT",
                                "scopes": ["read:inconnu"]}]},
@@ -269,7 +269,7 @@ def test_unknown_scope_rejected_at_creation():
 
 
 def test_revoke_unknown_key_404():
-    r = client.delete("/admin/api-keys/9999", headers=admin_headers())
+    r = client.delete("/api/v1/admin/api-keys/9999", headers=admin_headers())
     assert r.status_code == 404
 
 
@@ -278,7 +278,7 @@ def test_revoke_unknown_key_404():
 # =====================================================
 
 def test_jwt_still_works_on_data():
-    r = client.get("/competences", headers=admin_headers())
+    r = client.get("/api/v1/competences", headers=admin_headers())
     assert r.status_code == 200
     assert sources_of(r) == ["BUT", "Polytech"]
 
@@ -286,7 +286,7 @@ def test_jwt_still_works_on_data():
 def test_api_key_cannot_run_pipeline():
     created = create_key(name="cle-pipeline",
                          permissions=[{"source_name": "*", "scopes": ["*"]}])
-    r = client.post("/pipeline/run",
+    r = client.post("/api/v1/pipeline/run",
                     headers={"X-API-Key": created["api_key"]})
     # une API key n'est jamais admin : 403 (authentifiee mais interdite)
     assert r.status_code == 403

@@ -75,7 +75,7 @@ def setup_db():
 
 
 def get_token(username, password=PASSWORD):
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": username, "password": password})
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
@@ -87,7 +87,7 @@ def headers(username, password=PASSWORD):
 
 def create_api_key_star():
     r = client.post(
-        "/admin/api-keys",
+        "/api/v1/admin/api-keys",
         json={"name": "cle-test",
               "permissions": [{"source_name": "*", "scopes": ["*"]}]},
         headers=headers("admin"),
@@ -101,16 +101,16 @@ def create_api_key_star():
 # =====================================================
 
 def test_admin_routes_require_auth():
-    assert client.get("/admin/users").status_code == 401
-    assert client.post("/admin/users", json={}).status_code == 401
+    assert client.get("/api/v1/admin/users").status_code == 401
+    assert client.post("/api/v1/admin/users", json={}).status_code == 401
 
 
 def test_viewer_cannot_access_admin_users():
-    r = client.get("/admin/users", headers=headers("viewer"))
+    r = client.get("/api/v1/admin/users", headers=headers("viewer"))
     assert r.status_code == 403
 
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "intrus", "email": "i@test.fr",
               "password": "motdepasse-x-123"},
         headers=headers("viewer"),
@@ -120,7 +120,7 @@ def test_viewer_cannot_access_admin_users():
 
 def test_api_key_cannot_access_admin_users():
     api_key = create_api_key_star()  # clé avec tous les droits data
-    r = client.get("/admin/users", headers={"X-API-Key": api_key})
+    r = client.get("/api/v1/admin/users", headers={"X-API-Key": api_key})
     assert r.status_code == 403
 
 
@@ -130,7 +130,7 @@ def test_api_key_cannot_access_admin_users():
 
 def test_admin_can_create_viewer_and_new_viewer_can_login():
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "nouveau", "email": "nouveau@test.fr",
               "password": "motdepasse-n-123", "role": "viewer"},
         headers=headers("admin"),
@@ -147,7 +147,7 @@ def test_admin_can_create_viewer_and_new_viewer_can_login():
 
 def test_create_duplicate_username_conflict():
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "viewer", "email": "autre@test.fr",
               "password": "motdepasse-x-123"},
         headers=headers("admin"),
@@ -157,7 +157,7 @@ def test_create_duplicate_username_conflict():
 
 def test_create_password_too_short_rejected():
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "courtmdp", "email": "c@test.fr",
               "password": "court"},
         headers=headers("admin"),
@@ -166,7 +166,7 @@ def test_create_password_too_short_rejected():
 
 
 def test_admin_can_list_users():
-    r = client.get("/admin/users", headers=headers("admin"))
+    r = client.get("/api/v1/admin/users", headers=headers("admin"))
     assert r.status_code == 200
     usernames = {u["username"] for u in r.json()}
     assert {"admin", "viewer"} <= usernames
@@ -180,7 +180,7 @@ def test_admin_can_update_role_email_active():
     db.close()
 
     r = client.patch(
-        f"/admin/users/{viewer_id}",
+        f"/api/v1/admin/users/{viewer_id}",
         json={"email": "nouvel-email@test.fr", "role": "admin"},
         headers=headers("admin"),
     )
@@ -190,7 +190,7 @@ def test_admin_can_update_role_email_active():
 
     # désactivation (viewer redevenu admin mais pas le dernier : admin reste)
     r = client.patch(
-        f"/admin/users/{viewer_id}",
+        f"/api/v1/admin/users/{viewer_id}",
         json={"is_active": False},
         headers=headers("admin"),
     )
@@ -198,7 +198,7 @@ def test_admin_can_update_role_email_active():
     assert r.json()["is_active"] is False
 
     # un user désactivé ne peut plus se connecter
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": "viewer", "password": PASSWORD})
     assert r.status_code == 403
 
@@ -209,14 +209,14 @@ def test_admin_can_change_user_password():
     db.close()
 
     r = client.patch(
-        f"/admin/users/{viewer_id}",
+        f"/api/v1/admin/users/{viewer_id}",
         json={"password": "nouveau-mdp-securise-1"},
         headers=headers("admin"),
     )
     assert r.status_code == 200
 
     # ancien mot de passe refusé, nouveau accepté
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": "viewer", "password": PASSWORD})
     assert r.status_code == 401
     assert get_token("viewer", "nouveau-mdp-securise-1")
@@ -228,7 +228,7 @@ def test_admin_cannot_deactivate_self():
     db.close()
 
     r = client.patch(
-        f"/admin/users/{admin_id}",
+        f"/api/v1/admin/users/{admin_id}",
         json={"is_active": False},
         headers=headers("admin"),
     )
@@ -241,7 +241,7 @@ def test_admin_cannot_demote_self():
     db.close()
 
     r = client.patch(
-        f"/admin/users/{admin_id}",
+        f"/api/v1/admin/users/{admin_id}",
         json={"role": "viewer"},
         headers=headers("admin"),
     )
@@ -253,14 +253,14 @@ def test_admin_cannot_delete_self():
     admin_id = db.query(User).filter(User.username == "admin").first().id
     db.close()
 
-    r = client.delete(f"/admin/users/{admin_id}", headers=headers("admin"))
+    r = client.delete(f"/api/v1/admin/users/{admin_id}", headers=headers("admin"))
     assert r.status_code == 400
 
 
 def test_cannot_remove_last_active_admin():
     # admin2 actif : le rétrograder est permis tant qu'admin reste
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "admin2", "email": "admin2@test.fr",
               "password": "motdepasse-a-123", "role": "admin"},
         headers=headers("admin"),
@@ -273,7 +273,7 @@ def test_cannot_remove_last_active_admin():
     db.close()
 
     r = client.patch(
-        f"/admin/users/{admin_id}",
+        f"/api/v1/admin/users/{admin_id}",
         json={"role": "viewer"},
         headers=headers("admin2", "motdepasse-a-123"),
     )
@@ -283,7 +283,7 @@ def test_cannot_remove_last_active_admin():
     # personne ne peut le rétrograder/désactiver (ici : lui-même → self-guard,
     # et le guard dernier-admin le protège aussi de toute autre voie)
     r = client.patch(
-        f"/admin/users/{admin2_id}",
+        f"/api/v1/admin/users/{admin2_id}",
         json={"role": "viewer"},
         headers=headers("admin2", "motdepasse-a-123"),
     )
@@ -293,7 +293,7 @@ def test_cannot_remove_last_active_admin():
 def test_delete_user_removes_permissions():
     # créer un user avec une permission
     r = client.post(
-        "/admin/users",
+        "/api/v1/admin/users",
         json={"username": "ephemere", "email": "e@test.fr",
               "password": "motdepasse-e-123"},
         headers=headers("admin"),
@@ -301,17 +301,17 @@ def test_delete_user_removes_permissions():
     user_id = r.json()["id"]
 
     client.post(
-        f"/admin/users/{user_id}/permissions",
+        f"/api/v1/admin/users/{user_id}/permissions",
         json={"source_name": "Polytech", "scopes": ["read:competence"]},
         headers=headers("admin"),
     )
 
-    r = client.delete(f"/admin/users/{user_id}", headers=headers("admin"))
+    r = client.delete(f"/api/v1/admin/users/{user_id}", headers=headers("admin"))
     assert r.status_code == 200
     assert r.json()["permissions_deleted"] == 1
 
     # login impossible, permissions purgées
-    r = client.post("/auth/login",
+    r = client.post("/api/v1/auth/login",
                     data={"username": "ephemere",
                           "password": "motdepasse-e-123"})
     assert r.status_code == 401
@@ -326,7 +326,7 @@ def test_delete_user_removes_permissions():
 
 
 def test_patch_unknown_user_404():
-    r = client.patch("/admin/users/9999", json={"role": "viewer"},
+    r = client.patch("/api/v1/admin/users/9999", json={"role": "viewer"},
                      headers=headers("admin"))
     assert r.status_code == 404
 
@@ -345,7 +345,7 @@ def viewer_id():
 def test_admin_can_grant_source_permission():
     uid = viewer_id()
     r = client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "Polytech",
               "scopes": ["read:competence", "read:curriculum",
                          "read:analytics"]},
@@ -363,7 +363,7 @@ def test_admin_can_grant_source_permission():
 def test_admin_can_grant_wildcard_source():
     uid = viewer_id()
     r = client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "*", "scopes": ["*"]},
         headers=headers("admin"),
     )
@@ -374,11 +374,11 @@ def test_admin_can_grant_wildcard_source():
 def test_admin_can_list_user_permissions():
     uid = viewer_id()
     client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "BUT", "scopes": ["read:competence"]},
         headers=headers("admin"),
     )
-    r = client.get(f"/admin/users/{uid}/permissions",
+    r = client.get(f"/api/v1/admin/users/{uid}/permissions",
                    headers=headers("admin"))
     assert r.status_code == 200
     sources = [p["source_name"] for p in r.json()]
@@ -388,13 +388,13 @@ def test_admin_can_list_user_permissions():
 def test_upsert_same_source_case_insensitive():
     uid = viewer_id()
     client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "Polytech", "scopes": ["read:competence"]},
         headers=headers("admin"),
     )
     # même source en casse différente → mise à jour, pas de doublon
     r = client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "POLYTECH",
               "scopes": ["read:competence", "read:curriculum"]},
         headers=headers("admin"),
@@ -402,7 +402,7 @@ def test_upsert_same_source_case_insensitive():
     assert r.status_code == 201
     assert set(r.json()["scopes"]) == {"read:competence", "read:curriculum"}
 
-    r = client.get(f"/admin/users/{uid}/permissions",
+    r = client.get(f"/api/v1/admin/users/{uid}/permissions",
                    headers=headers("admin"))
     polytech_perms = [p for p in r.json()
                       if p["source_name"].lower() == "polytech"]
@@ -412,7 +412,7 @@ def test_upsert_same_source_case_insensitive():
 def test_unknown_scope_rejected():
     uid = viewer_id()
     r = client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "BUT", "scopes": ["read:inconnu"]},
         headers=headers("admin"),
     )
@@ -422,17 +422,17 @@ def test_unknown_scope_rejected():
 def test_admin_can_delete_permission():
     uid = viewer_id()
     r = client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "BUT", "scopes": ["read:competence"]},
         headers=headers("admin"),
     )
     perm_id = r.json()["id"]
 
-    r = client.delete(f"/admin/permissions/{perm_id}",
+    r = client.delete(f"/api/v1/admin/permissions/{perm_id}",
                       headers=headers("admin"))
     assert r.status_code == 200
 
-    r = client.delete(f"/admin/permissions/{perm_id}",
+    r = client.delete(f"/api/v1/admin/permissions/{perm_id}",
                       headers=headers("admin"))
     assert r.status_code == 404
 
@@ -444,18 +444,18 @@ def test_admin_can_delete_permission():
 def test_granted_viewer_sees_only_polytech():
     uid = viewer_id()
     client.post(
-        f"/admin/users/{uid}/permissions",
+        f"/api/v1/admin/users/{uid}/permissions",
         json={"source_name": "polytech",  # casse volontairement différente
               "scopes": ["read:competence"]},
         headers=headers("admin"),
     )
 
-    r = client.get("/competences", headers=headers("viewer"))
+    r = client.get("/api/v1/competences", headers=headers("viewer"))
     assert r.status_code == 200
     sources = sorted({i["source"] for i in r.json()["data"]})
     assert sources == ["Polytech"]  # jamais BUT
 
 
 def test_viewer_without_grant_sees_nothing():
-    r = client.get("/competences", headers=headers("viewer"))
+    r = client.get("/api/v1/competences", headers=headers("viewer"))
     assert r.json()["status"] == "empty"

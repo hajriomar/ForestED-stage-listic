@@ -124,6 +124,19 @@ def process_file(domain, source_name, file_path):
 
         logger.info(f"Generated analytics: {analytics_file}")
 
+        # ==========================================
+        # SAVE QUALITY REPORT (optionnel, non bloquant)
+        # ==========================================
+        # Certains transformers (usmb_licence) fournissent un rapport
+        # qualité ; s'il est absent, comportement strictement inchangé.
+
+        quality_report = result.get("quality_report")
+        if quality_report:
+            quality_file = analytics_folder / f"{file_path.stem}_quality.json"
+            with open(quality_file, "w", encoding="utf-8") as f:
+                json.dump(quality_report, f, indent=4, ensure_ascii=False)
+            logger.info(f"Generated quality report: {quality_file}")
+
     except FileNotFoundError as e:
         logger.error(f"File not found: {file_path} - {e}")
         raise

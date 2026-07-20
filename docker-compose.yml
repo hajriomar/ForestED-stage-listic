@@ -1,11 +1,30 @@
 services:
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: forested_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=forested
+      - POSTGRES_USER=forested
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-forested}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Pas de port publié : la base n'est accessible qu'aux conteneurs.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forested -d forested"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
 
     build:
       context: ./backend_python
 
     container_name: forested_backend
+
+    restart: unless-stopped
 
     volumes:
       - ./backend_python:/app
@@ -18,9 +37,15 @@ services:
     environment:
       - APP_ENV=${APP_ENV:-development}
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-}
-      - DATABASE_URL=${DATABASE_URL:-sqlite:///./forested.db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg2://forested:${POSTGRES_PASSWORD:-forested}@postgres:5432/forested}
 
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Migrations Alembic AVANT le serveur : la base est toujours au bon
+    # schéma, y compris à la première installation.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app"
 
   frontend:
 
@@ -28,6 +53,8 @@ services:
       context: ./front
 
     container_name: forested_frontend
+
+    restart: unless-stopped
 
     volumes:
       - ./front/app:/app
@@ -38,7 +65,7 @@ services:
     working_dir: /app
 
     environment:
-      - API_BASE_URL=${API_BASE_URL:-http://backend:8000}
+      - API_BASE_URL=${API_BASE_URL:-http://backend:8000/api/v1}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-dev-flask-secret-change-me}
       # URL publique du dashboard, utilisée pour construire les liens
       # d'accès invité (/access/<clé>) affichés dans la page admin.
@@ -48,3 +75,6 @@ services:
       - backend
 
     command: python main.py
+
+volumes:
+  pgdata:

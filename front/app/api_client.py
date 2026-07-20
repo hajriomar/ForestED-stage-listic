@@ -19,9 +19,11 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://backend:8000")
+# Patch A : l'API est versionnée — la base inclut /api/v1 (une seule
+# variable, jamais de /api/v1 hardcodé dans les chemins d'appel).
+API_BASE_URL = os.getenv("API_BASE_URL", "http://backend:8000/api/v1")
 TIMEOUT = float(os.getenv("API_TIMEOUT_SECONDS", "15"))
-# L'upload traite le fichier dans la requête (pipeline) : délai plus long.
+# Upload / import API : le pipeline traite le fichier dans la requête.
 UPLOAD_TIMEOUT = float(os.getenv("API_UPLOAD_TIMEOUT_SECONDS", "120"))
 
 
@@ -70,7 +72,7 @@ def _map_errors(response) -> dict:
 
 
 def _request(method: str, path: str, token=None, api_key=None,
-             json_body=None) -> dict:
+             json_body=None, timeout=None) -> dict:
     """Requête authentifiée générique avec mapping d'erreurs."""
     try:
         response = requests.request(
@@ -78,7 +80,7 @@ def _request(method: str, path: str, token=None, api_key=None,
             f"{API_BASE_URL}{path}",
             headers=_auth_headers(token, api_key),
             json=json_body,
-            timeout=TIMEOUT,
+            timeout=timeout or TIMEOUT,
         )
     except requests.RequestException as exc:
         logger.error("API injoignable (%s %s) : %s", method, path, exc)
@@ -259,3 +261,40 @@ def admin_upload_source(token: str, domain: str, source_name: str,
         raise ApiUnavailable("Le serveur de données est indisponible.") from exc
 
     return _map_errors(response)
+
+
+def admin_import_api_source(token: str, domain: str, source_name: str,
+                            formation_name: str, url: str,
+                            output_filename=None) -> dict:
+    """Importe un JSON depuis une API externe (GET) ; le backend
+    sauvegarde dans raw/ puis traite UNIQUEMENT ce fichier."""
+    payload = {
+        "domain": domain,
+        "source_name": source_name,
+        "formation_name": formation_name,
+        "url": url,
+        "method": "GET",
+    }
+    if output_filename and str(output_filename).strip():
+        payload["output_filename"] = str(output_filename).strip()
+
+    return _request("POST", "/admin/sources/import-api", token=token,
+                    json_body=payload, timeout=UPLOAD_TIMEOUT)
+
+
+def admin_supported_sources(token: str) -> dict:
+    """Sources supportées par le pipeline (dropdown d'upload admin)."""
+    return _get("/admin/sources/supported", token=token)
+
+
+# Pipeline complet : retraite tous les fichiers raw -> long.
+PIPELINE_TIMEOUT = float(os.getenv("API_PIPELINE_TIMEOUT_SECONDS", "600"))
+
+
+def admin_run_pipeline(token: str) -> dict:
+    """Relance le pipeline ETL COMPLET (POST /pipeline/run, admin only).
+
+    Retraite tous les fichiers de raw/ (toutes sources, tous domaines)
+    et régénère processed/ + analytics/. Timeout long dédié."""
+    return _request("POST", "/pipeline/run", token=token,
+                    timeout=PIPELINE_TIMEOUT)

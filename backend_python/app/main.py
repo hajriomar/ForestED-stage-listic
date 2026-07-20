@@ -3,14 +3,17 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.config import (
     ANALYTICS_DATA_FOLDER,
+    IS_PRODUCTION,
     PROCESSED_DATA_FOLDER,
     SUPPORTED_DOMAINS,
+    TRUSTED_HOSTS,
 )
 from app.etl.pipeline import (
     run_pipeline,
@@ -42,18 +45,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+# Create FastAPI app.
+# En PRODUCTION (APP_ENV=production) la documentation interactive est
+# désactivée : la surface admin n'est pas exposée à Internet. En dev,
+# /docs, /redoc et /openapi.json restent disponibles comme avant.
 app = FastAPI(
     title="ForestED Backend API",
     description="API for pedagogical data management",
-    version="0.1.0"
+    version="1.0.0",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+    openapi_url=None if IS_PRODUCTION else "/openapi.json",
 )
 
+# Protection contre les attaques Host header (proxy / production).
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=TRUSTED_HOSTS)
+
+# ==========================================
+# API v1 — contrat de stabilité client
+# ==========================================
+# Toutes les routes métier vivent sous /api/v1 ; /health reste NON
+# préfixé (healthcheck Docker / proxy / monitoring). Le routeur est
+# inclus dans l'app EN FIN DE FICHIER, après la déclaration de toutes
+# ses routes.
+api = APIRouter(prefix="/api/v1")
+
 # Routers
-app.include_router(auth_router)
-app.include_router(api_keys_router)
-app.include_router(admin_users_router)
-app.include_router(admin_upload_router)
+api.include_router(auth_router)
+api.include_router(api_keys_router)
+api.include_router(admin_users_router)
+api.include_router(admin_upload_router)
 
 # ==========================================
 # DATA HELPERS
@@ -172,7 +193,7 @@ async def health_check() -> Dict[str, str]:
 # PIPELINE ENDPOINTS (admin uniquement)
 # ==========================================
 
-@app.post("/pipeline/run", tags=["pipeline"])
+@api.post("/pipeline/run", tags=["pipeline"])
 async def run_full_pipeline(
     admin: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -191,7 +212,7 @@ async def run_full_pipeline(
             detail="Pipeline failed"
         )
 
-@app.post("/pipeline/domain/{domain}", tags=["pipeline"])
+@api.post("/pipeline/domain/{domain}", tags=["pipeline"])
 async def run_domain_etl(
     domain: str,
     admin: User = Depends(require_admin),
@@ -224,7 +245,7 @@ async def run_domain_etl(
 # DATA ENDPOINTS (JWT ou X-API-Key, filtres par source)
 # ==========================================
 
-@app.get("/competences", tags=["competence"])
+@api.get("/competences", tags=["competence"])
 async def get_competences(
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
@@ -235,7 +256,7 @@ async def get_competences(
         SCOPE_READ_COMPETENCE, principal, db,
     )
 
-@app.get("/curricula", tags=["curriculum"])
+@api.get("/curricula", tags=["curriculum"])
 async def get_curricula(
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
@@ -246,7 +267,7 @@ async def get_curricula(
         SCOPE_READ_CURRICULUM, principal, db,
     )
 
-@app.get("/analytics/{domain}", tags=["analytics"])
+@api.get("/analytics/{domain}", tags=["analytics"])
 async def get_analytics(
     domain: str,
     principal: Principal = Depends(get_current_principal),
@@ -284,6 +305,12 @@ async def general_exception_handler(request, exc):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+
+# ==========================================
+# Enregistrement du routeur versionné (après TOUTES ses routes)
+# ==========================================
+
+app.include_router(api)
 
 # ==========================================
 # STARTUP/SHUTDOWN

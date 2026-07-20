@@ -1,32 +1,30 @@
 """
-Route admin d'upload de fichiers sources.
+Routes admin d'ajout de fichiers sources.
 
-POST /admin/sources/upload (multipart) :
-    domain         : "competence" | "curriculum"
-    source_name    : source (ex. Polytech, BUT) — [A-Za-z0-9_-] uniquement
-    formation_name : préfixe du fichier (ex. SNI, QLIO) — [A-Za-z0-9_-]
-    file           : .json / .xlsx / .xls / .csv (max 20 Mo)
+POST /admin/sources/upload      : téléverser un fichier local
+                                  (.json/.xlsx/.xls/.csv, max 20 Mo)
+POST /admin/sources/import-api  : importer un JSON depuis une API externe
+                                  (GET uniquement, anti-SSRF, max 20 Mo)
 
-Comportement :
-1. validations strictes (extension, taille, anti path-traversal) ;
-2. sauvegarde sous RAW_DATA_FOLDER/{domain}/{source}/{FORMATION}_{nom}.ext ;
-3. traitement du SEUL fichier uploadé via process_file — JAMAIS de run
-   global : les autres fichiers, sources et domaines ne sont pas touchés
-   et les anciens outputs ne sont pas modifiés ;
-4. si le pipeline rejette le fichier : suppression du fichier de raw/
-   (pas de fichier cassé qui casserait un futur run complet) + 422 clair ;
-5. fichier déjà existant : 409, pas d'écrasement silencieux.
+Dans les deux cas : sauvegarde dans raw/{domain}/{source}/, puis
+traitement du SEUL fichier créé via process_file — JAMAIS de run global,
+les autres fichiers/sources/domaines et leurs outputs ne sont pas touchés.
+Échec du pipeline -> fichier raw supprimé + 422 clair.
+Fichier existant -> 409, pas d'écrasement silencieux.
 
-Réservé au rôle admin (require_admin) : viewer -> 403, API key/invité -> 403,
-sans token -> 401.
+Réservé au rôle admin (require_admin) : viewer -> 403,
+API key / invité / lien partagé -> 403, sans token -> 401.
 """
 
 import logging
 import re
 from pathlib import Path
+from typing import Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 
+from app.auth import admin_api_import_service as api_import
 from app.auth.dependencies import require_admin
 from app.auth.models import User
 from app.config import RAW_DATA_FOLDER, SUPPORTED_DOMAINS
@@ -55,11 +53,26 @@ def _validate_component(value: str, label: str) -> str:
     return value
 
 
+def _validate_domain(domain: str) -> str:
+    domain = (domain or "").strip().lower()
+    if domain not in SUPPORTED_DOMAINS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Domaine inconnu : {domain!r}. "
+                   f"Attendu : {SUPPORTED_DOMAINS}",
+        )
+    return domain
+
+
 def _sanitize_stem(stem: str) -> str:
     """Nettoie le nom de fichier original (sans extension)."""
     cleaned = re.sub(r"[^A-Za-z0-9_\-]+", "_", stem).strip("_")
     return cleaned or "fichier"
 
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Upload d'un fichier local
+# ══════════════════════════════════════════════════════════════════════════
 
 @router.post("/sources/upload")
 async def upload_source(
@@ -72,14 +85,7 @@ async def upload_source(
     """Téléverse un fichier source et traite UNIQUEMENT ce fichier."""
 
     # --- Validations ------------------------------------------------------
-    domain = (domain or "").strip().lower()
-    if domain not in SUPPORTED_DOMAINS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Domaine inconnu : {domain!r}. "
-                   f"Attendu : {SUPPORTED_DOMAINS}",
-        )
-
+    domain = _validate_domain(domain)
     source_name = _validate_component(source_name, "source_name")
     formation_name = _validate_component(formation_name, "formation_name")
 
@@ -162,4 +168,79 @@ async def upload_source(
             "analytics": f"analytics/{domain}/{source_name}/"
                          f"{stem}_flat.json",
         },
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Import depuis une API JSON externe
+# ══════════════════════════════════════════════════════════════════════════
+
+class ApiImportRequest(BaseModel):
+    domain: str
+    source_name: str
+    formation_name: str
+    url: str = Field(..., min_length=8)
+    method: Literal["GET"] = "GET"       # v1 : GET uniquement
+    output_filename: Optional[str] = None
+    headers: Optional[Dict[str, str]] = None
+
+
+@router.post("/sources/import-api")
+def import_api_source(
+    payload: ApiImportRequest,
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Importe un JSON depuis une API externe et traite UNIQUEMENT
+    le fichier créé (voir admin_api_import_service pour la sécurité)."""
+
+    domain = _validate_domain(payload.domain)
+    source_name = _validate_component(payload.source_name, "source_name")
+    formation_name = _validate_component(
+        payload.formation_name, "formation_name")
+
+    # Log SANS les valeurs de headers, et jamais les headers sensibles
+    logger.info(
+        "Import API demandé par admin=%s : %s/%s/%s url=%s headers=%s",
+        admin.username, domain, source_name, formation_name,
+        payload.url, api_import.safe_header_names(payload.headers),
+    )
+
+    try:
+        result = api_import.import_api_source_and_process(
+            domain=domain,
+            source_name=source_name,
+            formation_name=formation_name,
+            url=payload.url,
+            headers=payload.headers,
+            output_filename=payload.output_filename,
+        )
+    except api_import.ApiImportError as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail=str(exc),
+        ) from exc
+
+    logger.info(
+        "Import API traité avec succès : %s", result["raw_file"],
+    )
+    return result
+
+
+@router.get("/sources/supported")
+def supported_sources(admin: User = Depends(require_admin)):
+    """
+    Sources supportées par le pipeline (registry des transformers).
+
+    Utilisé par la page admin pour proposer une nouvelle source dans le
+    dropdown d'upload AVANT son premier fichier (ex. usmb_licence).
+    Import paresseux : cohérent avec la philosophie de la factory.
+    """
+    from app.etl.transform.transformer_factory import TRANSFORMERS
+
+    by_domain: dict = {}
+    for (domain, source) in TRANSFORMERS:
+        by_domain.setdefault(domain, set()).add(source)
+
+    return {
+        "sources": sorted({s for (_d, s) in TRANSFORMERS}),
+        "by_domain": {d: sorted(s) for d, s in by_domain.items()},
     }

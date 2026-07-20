@@ -1,9 +1,10 @@
 """
 normalizer_factory.py
 ======================
-Factory des normalizers ETL ForestED.
+Factory des normalizers ETL ForestED — registry déclarative.
 
-Symétrique à TransformerFactory : même signature, même logique de sélection.
+Symétrique à TransformerFactory : même signature, même normalisation
+(strip + lower), même mécanisme de registry avec imports paresseux.
 
 Flux d'utilisation
 ------------------
@@ -18,16 +19,21 @@ Flux d'utilisation
 
 Ajouter un normalizer
 ---------------------
-1. Créer la classe dans le bon sous-dossier (competence/ ou curriculum/).
-2. L'importer ici et l'enregistrer dans get_normalizer().
-Le reste du pipeline ne change pas.
+Une seule ligne à ajouter dans NORMALIZERS :
 
-Passthrough
------------
-Si aucun normalizer dédié n'existe pour (domain, source), la factory
-retourne un PassthroughNormalizer. Celui-ci DÉPLIE l'enveloppe JSON de
-l'extractor ({"file_type": "json", "content": ...}) car les transformers
-"ancienne génération" attendent le contenu brut :
+    ("competence", "unita"): (
+        "app.etl.normalize.unita_competence_normalizer",
+        "UNITACompetenceNormalizer",
+    ),
+
+Passthrough (comportement CONSERVÉ)
+-----------------------------------
+Contrairement à TransformerFactory (qui refuse une source inconnue),
+cette factory ne lève JAMAIS : si aucun normalizer dédié n'existe pour
+(domain, source), elle retourne un PassthroughNormalizer. Celui-ci
+DÉPLIE l'enveloppe JSON de l'extractor ({"file_type": "json",
+"content": ...}) car les transformers "ancienne génération" attendent
+le contenu brut :
 - content dict : fusionné avec file_name (nécessaire à la résolution
   d'identité programme des transformers curriculum) ;
 - content list : transmis tel quel ;
@@ -36,8 +42,40 @@ l'extractor ({"file_type": "json", "content": ...}) car les transformers
 """
 
 import logging
+from importlib import import_module
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Registry déclarative : (domain, source) -> (module, classe)
+# ---------------------------------------------------------------------------
+
+NORMALIZERS = {
+    ("competence", "but"): (
+        "app.etl.normalize.but_competence_normalizer",
+        "BUTCompetenceNormalizer",
+    ),
+    ("competence", "polytech"): (
+        "app.etl.normalize.polytech_competence_normalizer",
+        "PolytechCompetenceNormalizer",
+    ),
+    ("competence", "usmb_licence"): (
+        "app.etl.normalize.usmb_licence_competence_normalizer",
+        "USMBLicenceCompetenceNormalizer",
+    ),
+    ("curriculum", "usmb_licence"): (
+        # MÊME normalizer que le domaine competence : il extrait déjà
+        # semestre / UA / EC / module_code / parcours dans les liens.
+        "app.etl.normalize.usmb_licence_competence_normalizer",
+        "USMBLicenceCompetenceNormalizer",
+    ),
+    # curriculum BUT/Polytech : aucun normalizer dédié -> Passthrough.
+}
+
+
+def _normalize_key(domain, source_name):
+    return (str(domain).strip().lower(), str(source_name).strip().lower())
 
 
 class PassthroughNormalizer:
@@ -74,6 +112,11 @@ class PassthroughNormalizer:
 class NormalizerFactory:
 
     @staticmethod
+    def known_sources():
+        """Couples ayant un normalizer DÉDIÉ (les autres → Passthrough)."""
+        return sorted(f"{d}/{s}" for (d, s) in NORMALIZERS)
+
+    @staticmethod
     def get_normalizer(domain: str, source_name: str):
         """
         Retourne le normalizer correspondant au domaine et à la source.
@@ -83,37 +126,20 @@ class NormalizerFactory:
             source_name : "but" | "polytech" | …
 
         Returns:
-            Instance du normalizer correspondant, ou PassthroughNormalizer
-            si aucun normalizer dédié n'est enregistré.
+            Instance du normalizer dédié, ou PassthroughNormalizer
+            si aucun normalizer dédié n'est enregistré (jamais d'erreur).
         """
-        domain      = domain.strip().lower()
-        source_name = source_name.strip().lower()
+        key = _normalize_key(domain, source_name)
 
-        if domain == "competence":
+        entry = NORMALIZERS.get(key)
+        if entry is not None:
+            module_path, class_name = entry
+            module = import_module(module_path)      # import paresseux
+            return getattr(module, class_name)()
 
-            if source_name == "but":
-                from app.etl.normalize.but_competence_normalizer import (
-                    BUTCompetenceNormalizer,
-                )
-                return BUTCompetenceNormalizer()
-
-            if source_name == "polytech":
-                from app.etl.normalize.polytech_competence_normalizer import (
-                    PolytechCompetenceNormalizer,
-                )
-                return PolytechCompetenceNormalizer()
-
-        if domain == "curriculum":
-            pass
-            # Ajouter ici les normalizers curriculum :
-            # if source_name == "but":
-            #     from app.etl.normalize.curriculum.but_curriculum_normalizer import ...
-            #     return BUTCurriculumNormalizer()
-
-        # Aucun normalizer dédié : passthrough (avec dépliage d'enveloppe JSON).
         logger.info(
             "NormalizerFactory : pas de normalizer dédié pour %s/%s, "
             "passthrough vers le transformer.",
-            domain, source_name,
+            key[0], key[1],
         )
         return PassthroughNormalizer()

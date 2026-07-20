@@ -475,7 +475,7 @@ def _compute_curricular_layout(semesters, show_ac_detail=True):
 #  FIGURES
 # ══════════════════════════════════════════════════════════════════════════════
 
-def create_curricular_forest_figure(rows, selected=None):
+def create_curricular_forest_figure(rows, selected=None, comp_color_index=None):
     """
     Point d'entrée unique appelé depuis forested_forest.py. Le clic ne
     révèle plus une couche cachée (les 4 couches sont toujours dessinées) :
@@ -489,25 +489,35 @@ def create_curricular_forest_figure(rows, selected=None):
     kind = _sel_get(selected, "type")
 
     if kind in ("ue", "module", "ac"):
-        return create_curricular_forest_focus_figure(rows, selected, min_x_span=CURR_MIN_X_SPAN_FOCUS)
+        return create_curricular_forest_focus_figure(
+            rows, selected, min_x_span=CURR_MIN_X_SPAN_FOCUS,
+            comp_color_index=comp_color_index)
 
     if kind == "semester":
-        return create_curricular_forest_global_figure(rows, min_x_span=CURR_MIN_X_SPAN_FOCUS, highlight=selected)
+        return create_curricular_forest_global_figure(
+            rows, min_x_span=CURR_MIN_X_SPAN_FOCUS, highlight=selected,
+            comp_color_index=comp_color_index)
 
-    return create_curricular_forest_global_figure(rows, min_x_span=CURR_MIN_X_SPAN_FULL, highlight=None)
+    return create_curricular_forest_global_figure(
+        rows, min_x_span=CURR_MIN_X_SPAN_FULL, highlight=None,
+        comp_color_index=comp_color_index)
 
 
-def create_curricular_forest_global_figure(rows, min_x_span=CURR_MIN_X_SPAN_FULL, highlight=None):
+def create_curricular_forest_global_figure(rows, min_x_span=CURR_MIN_X_SPAN_FULL,
+                                           highlight=None, comp_color_index=None):
     """
     Vue Semestre → UE → Module → AC. `highlight` (optionnel) met en avant
     un semestre précis (losange agrandi) — utilisé quand l'utilisateur
     vient de cliquer un semestre (rows déjà filtrées sur ce seul semestre
     par l'appelant, donc la vue reste lisible).
     """
-    return _render_curricular_tree(rows, selected=highlight, min_x_span=min_x_span)
+    return _render_curricular_tree(rows, selected=highlight, min_x_span=min_x_span,
+                                   comp_color_index=comp_color_index)
 
 
-def create_curricular_forest_focus_figure(rows, selected, min_x_span=CURR_MIN_X_SPAN_FOCUS):
+def create_curricular_forest_focus_figure(rows, selected,
+                                          min_x_span=CURR_MIN_X_SPAN_FOCUS,
+                                          comp_color_index=None):
     """
     Vue zoomée : utilisée quand la sélection porte sur une UE, un module ou
     un AC. Les lignes reçues sont déjà réduites au sous-arbre cliqué par
@@ -515,10 +525,12 @@ def create_curricular_forest_focus_figure(rows, selected, min_x_span=CURR_MIN_X_
     forested_forest.py), donc la densité reste faible même si la formation
     entière compte des dizaines de modules.
     """
-    return _render_curricular_tree(rows, selected=selected, min_x_span=min_x_span)
+    return _render_curricular_tree(rows, selected=selected, min_x_span=min_x_span,
+                                   comp_color_index=comp_color_index)
 
 
-def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL):
+def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL,
+                            comp_color_index=None):
     """
     Moteur de rendu unique pour la forêt curriculaire : dessine toujours les
     4 couches Semestre → UE → Module → AC.
@@ -586,7 +598,14 @@ def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL
         niv = ac.get("niveau")
         nk = _niv_key(niv)
         if cc:
-            cfg = PALETTE_ESS[_comp_stable_color_index(cc)]
+            # Priorité au mapping unifié transmis par forested_forest.py
+            # (même couleur que la forêt pédagogique) ; repli sur l'index
+            # dérivé du code pour un usage autonome de ce module.
+            if comp_color_index and cc in comp_color_index:
+                idx = comp_color_index[cc] % len(PALETTE_ESS)
+            else:
+                idx = _comp_stable_color_index(cc)
+            cfg = PALETTE_ESS[idx]
             fill = cfg["n2_fill"]
             border = _niv_border_color(cfg, nk)
         else:

@@ -64,7 +64,7 @@ def setup_db():
 
 def do_login(username: str, password: str):
     return client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         data={"username": username, "password": password},
     )
 
@@ -136,7 +136,7 @@ def test_login_inactive_user():
 
 def test_me_with_valid_token():
     token = do_login("viewer", PASSWORD).json()["access_token"]
-    r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    r = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     body = r.json()
     assert body["username"] == "viewer"
@@ -145,7 +145,7 @@ def test_me_with_valid_token():
 
 
 def test_me_without_token():
-    r = client.get("/auth/me")
+    r = client.get("/api/v1/auth/me")
     assert r.status_code == 401
 
 
@@ -154,12 +154,12 @@ def test_me_with_expired_token():
     user = db.query(User).filter(User.username == "viewer").first()
     db.close()
     token = create_access_token(subject=str(user.id), role=user.role, expires_minutes=-1)
-    r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    r = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
 
 
 def test_me_with_garbage_token():
-    r = client.get("/auth/me", headers={"Authorization": "Bearer nimporte.quoi.xyz"})
+    r = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer nimporte.quoi.xyz"})
     assert r.status_code == 401
 
 

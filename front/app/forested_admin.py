@@ -71,6 +71,8 @@ BTN_DANGER = {**BTN, "backgroundColor": "#B4232A"}
 BTN_ROW_DANGER = {**BTN_DANGER, "padding": "5px 12px", "fontSize": "12px"}
 BTN_ROW_DISABLED = {**BTN_ROW_DANGER, "backgroundColor": "#CBD5E1",
                     "color": "#64748B", "cursor": "default"}
+BTN_ROW_WARNING = {**BTN_ROW_DANGER, "backgroundColor": "#D97706"}  # orange
+BTN_ROW_SUCCESS = {**BTN_ROW_DANGER, "backgroundColor": "#15803D"}  # vert
 BTN_ROW_SECONDARY = {"padding": "4px 10px", "fontSize": "11.5px",
                      "fontFamily": FONT_FAMILY, "fontWeight": "600",
                      "backgroundColor": "transparent", "color": "#B4232A",
@@ -187,23 +189,64 @@ def _usage_cell(kind: str) -> str:
     return "API données — utiliser le header X-API-Key"
 
 
+_KEY_DISABLE_CONFIRM = (
+    "Désactiver définitivement cette clé ?\n"
+    "Les intégrations ou dashboards partagés qui l'utilisent perdront "
+    "l'accès immédiatement.\n"
+    "Cette action est irréversible (le secret ne peut pas être réaffiché)."
+)
+
+
 def _action_cell(key: dict, state: str):
     if state == "actif":
-        return html.Button(
-            "Désactiver",
+        return dcc.ConfirmDialogProvider(
+            html.Button("Désactiver", n_clicks=0, style=BTN_ROW_DANGER),
             id={"type": "admin-key-disable", "index": key["id"]},
-            n_clicks=0, style=BTN_ROW_DANGER,
+            message=_KEY_DISABLE_CONFIRM,
         )
     if state == "desactive":
         return html.Button("Désactivé", disabled=True,
                            style=BTN_ROW_DISABLED)
     # Expiré : action secondaire (nettoyage), l'état parle de lui-même
-    return html.Button(
-        "Désactiver",
+    return dcc.ConfirmDialogProvider(
+        html.Button("Désactiver", n_clicks=0, style=BTN_ROW_SECONDARY,
+                    title="Clé expirée — désactiver définitivement"),
         id={"type": "admin-key-disable", "index": key["id"]},
-        n_clicks=0, style=BTN_ROW_SECONDARY,
-        title="Clé expirée — désactiver définitivement",
+        message=_KEY_DISABLE_CONFIRM,
     )
+
+
+def _user_action_cell(user: dict):
+    """Boutons d'action d'une ligne du tableau utilisateurs :
+    Activer (vert) / Désactiver (orange) selon le statut + Supprimer
+    (rouge). Chaque action passe par un panneau de confirmation ;
+    les garde-fous anti-lockout restent côté backend (soi-même /
+    dernier admin -> erreur explicite affichée)."""
+    name = user["username"]
+    if user["is_active"]:
+        toggle = dcc.ConfirmDialogProvider(
+            html.Button("Désactiver", n_clicks=0, style=BTN_ROW_WARNING),
+            id={"type": "admin-user-toggle", "index": user["id"]},
+            message=(f"Désactiver l'utilisateur « {name} » ?\n"
+                     f"Il ne pourra plus se connecter (réactivable "
+                     f"à tout moment)."),
+        )
+    else:
+        toggle = dcc.ConfirmDialogProvider(
+            html.Button("Activer", n_clicks=0, style=BTN_ROW_SUCCESS),
+            id={"type": "admin-user-toggle", "index": user["id"]},
+            message=(f"Réactiver l'utilisateur « {name} » ?\n"
+                     f"Il pourra de nouveau se connecter."),
+        )
+    delete = dcc.ConfirmDialogProvider(
+        html.Button("Supprimer", n_clicks=0, style=BTN_ROW_DANGER),
+        id={"type": "admin-user-delete", "index": user["id"]},
+        message=(f"Supprimer définitivement « {name} » ?\n"
+                 f"Ses permissions seront également supprimées.\n"
+                 f"Cette action est irréversible."),
+    )
+    return html.Div([toggle, delete],
+                    style={"display": "flex", "gap": "6px"})
 
 
 def _available_source_options(token, include_wildcard=True):
@@ -224,6 +267,26 @@ def _available_source_options(token, include_wildcard=True):
         options = ([{"label": "* — toutes les sources (actuelles et futures)",
                      "value": "*"}] + options)
     return options
+
+
+def _upload_source_options(token):
+    """Options du dropdown Source pour l'UPLOAD : union des sources
+    présentes dans les données ET des sources supportées par le pipeline
+    (GET /admin/sources/supported — registry des factories). Permet de
+    téléverser le PREMIER fichier d'une nouvelle source (ex. usmb_licence).
+    Déduplication insensible à la casse (les données affichent "BUT",
+    la registry "but" : une seule entrée, libellé des données conservé)."""
+    seen = {}
+    for opt in _available_source_options(token, include_wildcard=False):
+        seen[opt["value"].lower()] = opt["value"]
+    try:
+        for source in api_client.admin_supported_sources(token).get(
+                "sources", []):
+            seen.setdefault(source.lower(), source)
+    except api_client.ApiError:
+        pass
+    return [{"label": v, "value": v}
+            for v in sorted(seen.values(), key=str.lower)]
 
 
 def _table(headers, rows):
@@ -285,12 +348,22 @@ _section_users = html.Div([
             ], style=_SUBCARD),
 
             html.Div([
-                html.H4("Modifier / supprimer",
+                html.H4("Modifier un utilisateur",
                         style={**H4, "marginTop": "0"}),
                 html.Div([html.Label("Utilisateur", style=LABEL),
                           dcc.Dropdown(id="admin-user-selector",
                                        placeholder="Choisir...",
                                        style={"fontSize": "13px"})],
+                         style={"marginBottom": "10px"}),
+                html.Div([html.Label("Nouveau nom d'utilisateur (optionnel)",
+                                     style=LABEL),
+                          dcc.Input(id="admin-edit-username", type="text",
+                                    style=INPUT)],
+                         style={"marginBottom": "10px"}),
+                html.Div([html.Label("Nouvel email (optionnel)",
+                                     style=LABEL),
+                          dcc.Input(id="admin-edit-email", type="email",
+                                    style=INPUT)],
                          style={"marginBottom": "10px"}),
                 html.Div([html.Label("Nouveau rôle", style=LABEL),
                           dcc.Dropdown(id="admin-edit-role",
@@ -303,17 +376,6 @@ _section_users = html.Div([
                                        value="", clearable=False,
                                        style={"fontSize": "13px"})],
                          style={"marginBottom": "10px"}),
-                html.Div([html.Label("Statut", style=LABEL),
-                          dcc.Dropdown(id="admin-edit-active",
-                                       options=[{"label": "(inchangé)",
-                                                 "value": ""},
-                                                {"label": "actif",
-                                                 "value": "true"},
-                                                {"label": "désactivé",
-                                                 "value": "false"}],
-                                       value="", clearable=False,
-                                       style={"fontSize": "13px"})],
-                         style={"marginBottom": "10px"}),
                 html.Div([html.Label("Nouveau mot de passe (optionnel)",
                                      style=LABEL),
                           dcc.Input(id="admin-edit-password", type="password",
@@ -322,9 +384,6 @@ _section_users = html.Div([
                 html.Div([
                     html.Button("Appliquer", id="admin-apply-user-btn",
                                 n_clicks=0, style=BTN),
-                    html.Button("Supprimer", id="admin-delete-user-btn",
-                                n_clicks=0,
-                                style={**BTN_DANGER, "marginLeft": "10px"}),
                 ]),
                 html.Div(id="admin-edit-user-msg", style=MSG_OK),
             ], style=_SUBCARD),
@@ -371,16 +430,6 @@ _section_perms = html.Div([
                             n_clicks=0, style=BTN),
             ], style=_SUBCARD),
 
-            html.Div([
-                html.H4("Retirer une permission",
-                        style={**H4, "marginTop": "0"}),
-                html.Div([dcc.Dropdown(id="admin-perm-delete",
-                                       placeholder="Choisir la permission...",
-                                       style={"fontSize": "13px"})],
-                         style={"marginBottom": "12px"}),
-                html.Button("Retirer", id="admin-del-perm-btn", n_clicks=0,
-                            style=BTN_DANGER),
-            ], style=_SUBCARD),
             html.Div(id="admin-perm-msg", style=MSG_OK),
         ]),
     ], style=_TWO_COLS),
@@ -436,15 +485,28 @@ _section_keys = html.Div([
 
 _section_upload = html.Div([
     html.H3("Ajouter un fichier source", style=H3),
-    html.P("Le fichier est enregistré dans "
-           "raw/{domaine}/{source}/{FORMATION}_{nom} puis traité "
-           "immédiatement — lui seul : les autres fichiers et leurs "
-           "résultats ne sont pas touchés. Formats : " +
-           UPLOAD_EXTENSIONS + " (max 20 Mo).",
+    html.P("Deux modes : téléverser un fichier local, ou importer du JSON "
+           "depuis une API externe (GET uniquement). Dans les deux cas, le "
+           "fichier est enregistré dans raw/{domaine}/{source}/"
+           "{FORMATION}_{nom} puis traité immédiatement — lui seul, les "
+           "autres données ne sont pas touchées. Formats fichier : "
+           + UPLOAD_EXTENSIONS + " (max 20 Mo).",
            style={"fontFamily": FONT_FAMILY, "fontSize": "12.5px",
                   "color": "#64748B", "margin": "0 0 12px"}),
 
+    html.Div([html.Label("Mode d'import", style=LABEL),
+              dcc.RadioItems(
+                  id="admin-import-mode",
+                  options=[{"label": " Fichier local", "value": "local"},
+                           {"label": " API JSON", "value": "api"}],
+                  value="local", inline=True,
+                  inputStyle={"marginRight": "5px"},
+                  labelStyle={"marginRight": "22px"},
+                  style={"fontSize": "13px", "fontFamily": FONT_FAMILY})],
+             style={"marginBottom": "14px"}),
+
     html.Div([
+        # ── Champs communs aux deux modes ──
         html.Div([
             html.Div([html.Label("Domaine", style=LABEL),
                       dcc.Dropdown(id="admin-upload-domain",
@@ -463,29 +525,81 @@ _section_upload = html.Div([
                                 style=INPUT)],
                      style={"marginBottom": "10px"}),
         ]),
+
+        # ── Mode fichier local ──
         html.Div([
-            dcc.Upload(
-                id="admin-upload-file",
-                children=html.Div([
-                    "Glissez un fichier ici, ou ",
-                    html.Span("cliquez pour choisir", style={
-                        "fontWeight": "700",
-                        "textDecoration": "underline"}),
-                ]),
-                style=UPLOAD_ZONE,
-                multiple=False,
-            ),
-            html.Div(id="admin-upload-filename", style={
-                "fontFamily": FONT_FAMILY, "fontSize": "12.5px",
-                "color": "#334155", "marginTop": "6px",
-                "minHeight": "16px"}),
-            html.Button("Téléverser et traiter", id="admin-upload-btn",
-                        n_clicks=0, style={**BTN, "marginTop": "12px"}),
-            html.Div(id="admin-upload-msg", style=MSG_OK),
+            html.Div([
+                dcc.Upload(
+                    id="admin-upload-file",
+                    children=html.Div([
+                        "Glissez un fichier ici, ou ",
+                        html.Span("cliquez pour choisir", style={
+                            "fontWeight": "700",
+                            "textDecoration": "underline"}),
+                    ]),
+                    style=UPLOAD_ZONE,
+                    multiple=False,
+                ),
+                html.Div(id="admin-upload-filename", style={
+                    "fontFamily": FONT_FAMILY, "fontSize": "12.5px",
+                    "color": "#334155", "marginTop": "6px",
+                    "minHeight": "16px"}),
+                html.Button("Téléverser et traiter", id="admin-upload-btn",
+                            n_clicks=0, style={**BTN, "marginTop": "12px"}),
+                html.Div(id="admin-upload-msg", style=MSG_OK),
+            ], id="admin-upload-local-block"),
+
+            # ── Mode API JSON ──
+            html.Div([
+                html.Div([html.Label("URL de l'API (http/https)",
+                                     style=LABEL),
+                          dcc.Input(id="admin-api-url", type="url",
+                                    placeholder="https://exemple.org/api/curriculum",
+                                    style=INPUT)],
+                         style={"marginBottom": "10px"}),
+                html.Div("Méthode : GET (seule méthode supportée en v1)",
+                         style={"fontFamily": FONT_FAMILY,
+                                "fontSize": "12px", "color": "#64748B",
+                                "marginBottom": "10px"}),
+                html.Div([html.Label("Nom du fichier de sortie (optionnel, "
+                                     ".json forcé)", style=LABEL),
+                          dcc.Input(id="admin-api-output", type="text",
+                                    placeholder="curriculum_api.json",
+                                    style=INPUT)],
+                         style={"marginBottom": "12px"}),
+                html.Button("Importer depuis API et traiter",
+                            id="admin-api-import-btn", n_clicks=0,
+                            style=BTN),
+                html.Div(id="admin-api-msg", style=MSG_OK),
+            ], id="admin-upload-api-block", style={"display": "none"}),
         ]),
     ], style={**_TWO_COLS,
               "gridTemplateColumns": "minmax(0, 1fr) minmax(0, 1.4fr)",
-              "maxWidth": "860px"}),
+              "maxWidth": "900px"}),
+], style=CARD)
+
+
+# ── Carte : relancer le pipeline ETL complet ──────────────────────────────
+_pipeline_card = html.Div([
+    html.H3("Relancer le pipeline complet", style=H3),
+    html.P("Retraite TOUS les fichiers déjà présents dans raw/ (toutes "
+           "sources, tous domaines) et régénère processed/ et analytics/ — "
+           "sans rien supprimer ni re-téléverser. Utile après une mise à "
+           "jour des transformers. L'opération peut prendre plusieurs "
+           "minutes ; ne quittez pas la page pendant l'exécution.",
+           style={"fontFamily": FONT_FAMILY, "fontSize": "12.5px",
+                  "color": "#64748B", "margin": "0 0 14px",
+                  "maxWidth": "620px"}),
+    dcc.ConfirmDialogProvider(
+        html.Button("Relancer le pipeline", n_clicks=0, style=BTN),
+        id="admin-pipeline-confirm",
+        message=("Relancer le pipeline complet ?\n"
+                 "Tous les fichiers de raw/ (toutes sources, tous "
+                 "domaines) seront retraités — cela peut prendre "
+                 "plusieurs minutes."),
+    ),
+    dcc.Loading(html.Div(id="admin-pipeline-msg", style=MSG_OK),
+                type="circle", color=COLORS["primary_dark"]),
 ], style=CARD)
 
 
@@ -530,7 +644,8 @@ forested_admin_layout = html.Div([
                      style=SECTION_HIDDEN),
             html.Div(_section_keys, id="admin-section-keys",
                      style=SECTION_HIDDEN),
-            html.Div(_section_upload, id="admin-section-upload",
+            html.Div([_section_upload, _pipeline_card],
+                     id="admin-section-upload",
                      style=SECTION_HIDDEN),
         ], style={"flex": "1", "minWidth": "0"}),
     ], style={"display": "flex", "gap": "20px",
@@ -600,15 +715,18 @@ def register_callbacks(app):
             return err, [], [], err, [], [], []
 
         source_options = _available_source_options(token)
-        # Upload : sources concrètes uniquement (pas de "*")
-        upload_source_options = _available_source_options(
-            token, include_wildcard=False)
+        # Upload : sources concrètes des données + sources supportées par
+        # le pipeline (registry) — une nouvelle source est proposable
+        # AVANT son premier fichier (pas de "*").
+        upload_source_options = _upload_source_options(token)
 
         users_table = _table(
-            ["id", "utilisateur", "email", "rôle", "statut", "créé le"],
+            ["id", "utilisateur", "email", "rôle", "statut", "créé le",
+             "actions"],
             [[u["id"], u["username"], u["email"], u["role"],
               "actif" if u["is_active"] else "désactivé",
-              str(u["created_at"])[:10]] for u in users],
+              str(u["created_at"])[:10],
+              _user_action_cell(u)] for u in users],
         )
         user_options = [
             {"label": f'{u["username"]} ({u["role"]}'
@@ -676,21 +794,24 @@ def register_callbacks(app):
         Output("admin-refresh", "data", allow_duplicate=True),
         Input("admin-apply-user-btn", "n_clicks"),
         State("admin-user-selector", "value"),
+        State("admin-edit-username", "value"),
+        State("admin-edit-email", "value"),
         State("admin-edit-role", "value"),
-        State("admin-edit-active", "value"),
         State("admin-edit-password", "value"),
         State("admin-refresh", "data"),
         prevent_initial_call=True,
     )
-    def update_user(_n, user_id, role, active, password, tick):
+    def update_user(_n, user_id, username, email, role, password, tick):
         if not user_id:
             return "Choisissez un utilisateur.", MSG_ERR, tick
 
         fields = {}
+        if username and username.strip():
+            fields["username"] = username.strip()
+        if email and email.strip():
+            fields["email"] = email.strip()
         if role:
             fields["role"] = role
-        if active:
-            fields["is_active"] = (active == "true")
         if password:
             fields["password"] = password
 
@@ -708,34 +829,67 @@ def register_callbacks(app):
             msg, style = _err(exc)
             return msg, style, tick
 
-    # ── Utilisateurs : supprimer ─────────────────────────────────────────
+    # ── Utilisateurs : activer / désactiver (boutons du tableau) ────────
     @app.callback(
         Output("admin-edit-user-msg", "children", allow_duplicate=True),
         Output("admin-edit-user-msg", "style", allow_duplicate=True),
         Output("admin-refresh", "data", allow_duplicate=True),
-        Input("admin-delete-user-btn", "n_clicks"),
-        State("admin-user-selector", "value"),
+        Input({"type": "admin-user-toggle", "index": ALL},
+              "submit_n_clicks"),
         State("admin-refresh", "data"),
         prevent_initial_call=True,
     )
-    def delete_user(_n, user_id, tick):
-        if not user_id:
-            return "Choisissez un utilisateur.", MSG_ERR, tick
+    def toggle_user_status(_clicks, tick):
+        # Garde : le rendu du tableau (re)crée les boutons, ce qui
+        # déclenche le callback sans clic réel.
+        triggered = ctx.triggered
+        if not triggered or not triggered[0].get("value"):
+            return no_update, no_update, no_update
+        user_id = int(ctx.triggered_id["index"])
+        try:
+            users = api_client.admin_list_users(auth_ui.current_token())
+            target = next(u for u in users if u["id"] == user_id)
+            new_active = not target["is_active"]
+            api_client.admin_update_user(
+                auth_ui.current_token(), user_id,
+                {"is_active": new_active})
+            verbe = "réactivé" if new_active else "désactivé"
+            return (f'Utilisateur "{target["username"]}" {verbe}.',
+                    MSG_OK, (tick or 0) + 1)
+        except (api_client.ApiError, StopIteration) as exc:
+            msg, style = _err(exc) if isinstance(exc, api_client.ApiError) \
+                else ("Utilisateur introuvable.", MSG_ERR)
+            return msg, style, no_update
+
+    # ── Utilisateurs : supprimer (boutons du tableau) ────────────────────
+    @app.callback(
+        Output("admin-edit-user-msg", "children", allow_duplicate=True),
+        Output("admin-edit-user-msg", "style", allow_duplicate=True),
+        Output("admin-refresh", "data", allow_duplicate=True),
+        Input({"type": "admin-user-delete", "index": ALL},
+              "submit_n_clicks"),
+        State("admin-refresh", "data"),
+        prevent_initial_call=True,
+    )
+    def delete_user(_clicks, tick):
+        triggered = ctx.triggered
+        if not triggered or not triggered[0].get("value"):
+            return no_update, no_update, no_update
+        user_id = int(ctx.triggered_id["index"])
         try:
             result = api_client.admin_delete_user(
-                auth_ui.current_token(), int(user_id),
+                auth_ui.current_token(), user_id,
             )
             return (f'Utilisateur {result["id"]} supprimé '
                     f'({result.get("permissions_deleted", 0)} permission(s) '
                     f'retirée(s)).', MSG_OK, (tick or 0) + 1)
         except api_client.ApiError as exc:
             msg, style = _err(exc)
-            return msg, style, tick
+            return msg, style, no_update
 
     # ── Permissions : liste par utilisateur ──────────────────────────────
     @app.callback(
         Output("admin-perms-table", "children"),
-        Output("admin-perm-delete", "options"),
         Input("admin-perm-user", "value"),
         Input("admin-refresh", "data"),
     )
@@ -744,25 +898,29 @@ def register_callbacks(app):
             return html.Div("Choisissez un utilisateur pour voir ses "
                             "permissions.", style={
                                 "fontSize": "13px", "color": "#94A3B8",
-                                "fontFamily": FONT_FAMILY}), []
+                                "fontFamily": FONT_FAMILY})
         try:
             perms = api_client.admin_list_permissions(
                 auth_ui.current_token(), int(user_id),
             )
         except api_client.ApiError as exc:
-            return html.Div(str(exc), style=MSG_ERR), []
+            return html.Div(str(exc), style=MSG_ERR)
 
-        table = _table(
-            ["id", "source", "scopes"],
-            [[p["id"], p["source_name"], ", ".join(p["scopes"])]
-             for p in perms],
+        def _perm_action(p):
+            return dcc.ConfirmDialogProvider(
+                html.Button("Retirer", n_clicks=0, style=BTN_ROW_DANGER),
+                id={"type": "admin-perm-del", "index": p["id"]},
+                message=(f"Retirer la permission sur "
+                         f"« {p['source_name']} » ?\n"
+                         f"L'utilisateur perdra immédiatement l'accès "
+                         f"à cette source."),
+            )
+
+        return _table(
+            ["id", "source", "scopes", "action"],
+            [[p["id"], p["source_name"], ", ".join(p["scopes"]),
+              _perm_action(p)] for p in perms],
         )
-        options = [
-            {"label": f'{p["source_name"]} — {", ".join(p["scopes"])}',
-             "value": p["id"]}
-            for p in perms
-        ]
-        return table, options
 
     # ── Permissions : ajouter / mettre à jour ────────────────────────────
     @app.callback(
@@ -803,27 +961,32 @@ def register_callbacks(app):
             msg, style = _err(exc)
             return msg, style, tick
 
-    # ── Permissions : retirer ────────────────────────────────────────────
+    # ── Permissions : retirer (boutons du tableau) ───────────────────────
     @app.callback(
         Output("admin-perm-msg", "children", allow_duplicate=True),
         Output("admin-perm-msg", "style", allow_duplicate=True),
         Output("admin-refresh", "data", allow_duplicate=True),
-        Input("admin-del-perm-btn", "n_clicks"),
-        State("admin-perm-delete", "value"),
+        Input({"type": "admin-perm-del", "index": ALL},
+              "submit_n_clicks"),
         State("admin-refresh", "data"),
         prevent_initial_call=True,
     )
-    def delete_permission(_n, permission_id, tick):
-        if not permission_id:
-            return "Choisissez une permission.", MSG_ERR, tick
+    def delete_permission(_clicks, tick):
+        # Garde : le rendu du tableau (re)crée les boutons, ce qui
+        # déclenche le callback sans clic réel.
+        triggered = ctx.triggered
+        if not triggered or not triggered[0].get("value"):
+            return no_update, no_update, no_update
+        permission_id = int(ctx.triggered_id["index"])
         try:
             api_client.admin_delete_permission(
-                auth_ui.current_token(), int(permission_id),
+                auth_ui.current_token(), permission_id,
             )
-            return "Permission retirée.", MSG_OK, (tick or 0) + 1
+            return (f"Permission {permission_id} retirée.",
+                    MSG_OK, (tick or 0) + 1)
         except api_client.ApiError as exc:
             msg, style = _err(exc)
-            return msg, style, tick
+            return msg, style, no_update
 
     # ── Clés API : créer ─────────────────────────────────────────────────
     @app.callback(
@@ -914,7 +1077,8 @@ def register_callbacks(app):
         Output("admin-key-msg", "children"),
         Output("admin-key-msg", "style"),
         Output("admin-refresh", "data", allow_duplicate=True),
-        Input({"type": "admin-key-disable", "index": ALL}, "n_clicks"),
+        Input({"type": "admin-key-disable", "index": ALL},
+              "submit_n_clicks"),
         State("admin-refresh", "data"),
         prevent_initial_call=True,
     )
@@ -1005,3 +1169,84 @@ def register_callbacks(app):
                     result.get("file"))
         # contents remis à zéro pour éviter un double envoi accidentel
         return message, MSG_OK, None, (tick or 0) + 1
+
+
+    # ── Fichiers sources : bascule fichier local / API JSON ──────────────
+    @app.callback(
+        Output("admin-upload-local-block", "style"),
+        Output("admin-upload-api-block", "style"),
+        Input("admin-import-mode", "value"),
+    )
+    def toggle_import_mode(mode):
+        if mode == "api":
+            return {"display": "none"}, {}
+        return {}, {"display": "none"}
+
+    # ── Fichiers sources : importer depuis une API JSON ──────────────────
+    @app.callback(
+        Output("admin-api-msg", "children"),
+        Output("admin-api-msg", "style"),
+        Output("admin-refresh", "data", allow_duplicate=True),
+        Input("admin-api-import-btn", "n_clicks"),
+        State("admin-upload-domain", "value"),
+        State("admin-upload-source", "value"),
+        State("admin-upload-formation", "value"),
+        State("admin-api-url", "value"),
+        State("admin-api-output", "value"),
+        State("admin-refresh", "data"),
+        prevent_initial_call=True,
+    )
+    def import_api_source(_n, domain, source, formation, url,
+                          output_name, tick):
+        if not domain:
+            return "Choisissez un domaine.", MSG_ERR, tick
+        if not source:
+            return "Choisissez une source.", MSG_ERR, tick
+        if not formation or not formation.strip():
+            return ("Renseignez le nom de la formation (ex. SNI).",
+                    MSG_ERR, tick)
+        if not url or not url.strip():
+            return "Renseignez l'URL de l'API.", MSG_ERR, tick
+
+        try:
+            result = api_client.admin_import_api_source(
+                auth_ui.current_token(), domain, source,
+                formation.strip(), url.strip(), output_name,
+            )
+        except api_client.ApiError as exc:
+            msg, style = _err(exc)
+            return msg, style, tick
+
+        message = html.Div([
+            html.Div("Source API importée et traitée avec succès :",
+                     style={"fontWeight": "700"}),
+            html.Div(f'raw : {result.get("raw_file", "")}'),
+            html.Div(f'processed : {result.get("processed_file", "")}'),
+            html.Div(f'analytics : {result.get("analytics_file", "")}'),
+            html.Div("Seul ce fichier a été traité ; les autres données "
+                     "n'ont pas été modifiées.",
+                     style={"color": "#64748B", "fontSize": "12px"}),
+        ])
+        logger.info("Import API OK depuis la page admin : %s",
+                    result.get("raw_file"))
+        return message, MSG_OK, (tick or 0) + 1
+
+
+    # ── Pipeline complet : bouton admin (POST /pipeline/run existant) ─────
+    @app.callback(
+        Output("admin-pipeline-msg", "children"),
+        Output("admin-pipeline-msg", "style"),
+        Output("admin-refresh", "data", allow_duplicate=True),
+        Input("admin-pipeline-confirm", "submit_n_clicks"),
+        State("admin-refresh", "data"),
+        prevent_initial_call=True,
+    )
+    def run_full_pipeline(_n, tick):
+        try:
+            result = api_client.admin_run_pipeline(auth_ui.current_token())
+        except api_client.ApiError as exc:
+            msg, style = _err(exc)
+            return msg, style, no_update
+        return (f"✓ {result.get('message', 'Pipeline terminé.')} "
+                f"Les données affichées sont à jour.",
+                MSG_OK, (tick or 0) + 1)

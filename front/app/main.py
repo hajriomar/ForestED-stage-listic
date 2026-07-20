@@ -44,6 +44,16 @@ server.secret_key = os.getenv(
     "FLASK_SECRET_KEY", "dev-flask-secret-change-me"
 )
 
+# Cookies de session (Patch A) : HttpOnly + SameSite toujours ;
+# Secure UNIQUEMENT en production (HTTPS derrière le reverse proxy) —
+# en dev http://127.0.0.1, un cookie Secure ne serait jamais envoyé.
+server.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+if os.getenv("APP_ENV", "development") == "production":
+    server.config.update(SESSION_COOKIE_SECURE=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ACCÈS INVITÉ (dashboard partagé, patch 5.5)

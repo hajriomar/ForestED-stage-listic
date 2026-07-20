@@ -1265,14 +1265,20 @@ def register_callbacks(app):
         Input("forested-semester-selector", "value"),
         Input("forested-parcours-selector", "value"),
         Input("forested-competence-selector", "value"),
+        State("forest-view-mode", "value"),
         State("forested-sel-store", "data"),
         prevent_initial_call=True,
     )
-    def handle_click(click_data, reset, prog, sem, parcours, comp, current):
+    def handle_click(click_data, reset, prog, sem, parcours, comp,
+                     view_mode, current):
         if ctx.triggered_id in ("forested-reset-btn", "forested-programme-selector",
                                 "forested-semester-selector", "forested-parcours-selector",
                                 "forested-competence-selector"):
             return None
+        # Les clics faits dans la forêt curriculaire (customdata dict) ne
+        # doivent pas effacer le focus pédagogique : on les ignore ici.
+        if view_mode != "competence_forest":
+            return current
         if not click_data:
             return current
         try:
@@ -1343,6 +1349,17 @@ def register_callbacks(app):
             if not curricular_rows:
                 return empty_figure("Aucune donnée disponible pour cette formation.")
 
+            # Point 1 — couleurs unifiées entre les deux forêts : on réutilise
+            # le color_index stable (rang global) calculé par build_forest_rows,
+            # pour qu'une même compétence garde exactement la même couleur
+            # dans la forêt pédagogique et la forêt curriculaire (y compris
+            # les compétences de parcours COMP_XXX_n).
+            comp_colors = {
+                r["competence_code"]: r.get("color_index", 0)
+                for r in (rows or [])
+                if r.get("competence_code")
+            }
+
             # Filtre Parcours (v4 — audit + correctif demandés) : on réutilise
             # EXACTEMENT le mécanisme déjà prouvé fonctionnel côté forêt
             # pédagogique (filter_forest_rows_by_parcours), au lieu d'une
@@ -1378,9 +1395,13 @@ def register_callbacks(app):
                     filtered_curricular_rows, curricular_sel
                 )
                 if focus_rows:
-                    return create_curricular_forest_figure(focus_rows, selected=curricular_sel)
+                    return create_curricular_forest_figure(
+                        focus_rows, selected=curricular_sel,
+                        comp_color_index=comp_colors)
 
-            return create_curricular_forest_figure(filtered_curricular_rows, selected=None)
+            return create_curricular_forest_figure(
+                filtered_curricular_rows, selected=None,
+                comp_color_index=comp_colors)
 
         # ── Forêt pédagogique (comportement historique, strictement inchangé) ──
         if not rows:
@@ -1483,8 +1504,9 @@ def register_callbacks(app):
         Input("forested-semester-selector", "value"),
         Input("forested-parcours-selector", "value"),
         Input("forested-competence-selector", "value"),
+        Input("forest-view-mode", "value"),
     )
-    def update_legend(rows, sem, parcours, comp):
+    def update_legend(rows, sem, parcours, comp, view_mode):
         if not rows:
             return []
         rows = filter_forest_rows_by_parcours(rows, parcours)
@@ -1514,6 +1536,13 @@ def register_callbacks(app):
                     html.Span(cc, style={"fontSize": "11px", "color": "#374151"}),
                 ], style={"display": "flex", "alignItems": "center", "marginRight": "10px"})
             )
+        if view_mode == "curricular_forest":
+            niveaux_txt = "Niveau de l'AC = contour du point : fin (N1) → épais (N3)"
+            lecture_txt = "Bas → haut : Semestre ◆ → UE ◇ → Module ■ → AC ●"
+        else:
+            niveaux_txt = "N1 pâle → N2 moyen → N3 saturé"
+            lecture_txt = "Bas → haut : Compétence ◆ → Niveaux ■ → Barres AC"
+
         return [
             html.Div([
                 html.Label("Couleurs compétences", style=LABEL_STYLE),
@@ -1521,12 +1550,12 @@ def register_callbacks(app):
             ]),
             html.Div([
                 html.Label("Niveaux", style=LABEL_STYLE),
-                html.Span("N1 pâle → N2 moyen → N3 saturé",
+                html.Span(niveaux_txt,
                           style={"fontSize": "11px", "color": "#374151"}),
             ], style={"marginLeft": "20px"}),
             html.Div([
                 html.Label("Lecture", style=LABEL_STYLE),
-                html.Span("Bas → haut : Compétence ◆ → Niveaux ■ → Barres AC",
+                html.Span(lecture_txt,
                           style={"fontSize": "11px", "color": "#475569"}),
             ], style={"marginLeft": "20px"}),
         ]

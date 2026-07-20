@@ -1,0 +1,60 @@
+# ═══ ForestED — overrides de PRODUCTION (Patch A + B + C1) ═══
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml config   # vérifier
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Architecture :
+#   Internet ──► caddy (80/443, HTTPS auto Let's Encrypt)
+#                  ├─ https://APP_DOMAIN ──► frontend:8050   (réseau interne)
+#                  └─ https://API_DOMAIN ──► backend:8000    (réseau interne)
+#   postgres : réseau interne uniquement (aucun port public, comme en base)
+#
+# `ports: !reset []` retire les publications de ports du compose de base :
+# backend:8000 et frontend:8050 ne sont plus accessibles que via Caddy.
+# (Nécessite Docker Compose >= 2.24 — vérifier avec `docker compose version`.)
+#
+# Pas encore ici (étapes C2+) : rate limiting, sauvegardes, monitoring.
+
+services:
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: forested_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"          # HTTP/3
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:?Definir APP_DOMAIN dans .env (ex. app.exemple.fr)}
+      - API_DOMAIN=${API_DOMAIN:?Definir API_DOMAIN dans .env (ex. api.exemple.fr)}
+      - ACME_EMAIL=${ACME_EMAIL:?Definir ACME_EMAIL dans .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # certificats Let's Encrypt (persistants)
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    ports: !reset []              # plus AUCUN port public — accès via Caddy
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    environment:
+      - APP_ENV=production
+      # Domaines publics ; les hosts internes (localhost, 127.0.0.1,
+      # backend, testserver) sont ajoutés automatiquement (config.py A.1).
+      - TRUSTED_HOSTS=${TRUSTED_HOSTS:?Definir TRUSTED_HOSTS dans .env}
+
+  frontend:
+    ports: !reset []              # plus AUCUN port public — accès via Caddy
+    environment:
+      - APP_ENV=production
+      # URL publique du dashboard : sert à construire les liens d'accès
+      # invité (/access/<clé>) affichés dans la page admin.
+      - DASHBOARD_BASE_URL=https://${APP_DOMAIN:?Definir APP_DOMAIN dans .env}
+
+volumes:
+  caddy_data:
+  caddy_config:

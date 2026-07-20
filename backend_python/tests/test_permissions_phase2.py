@@ -127,7 +127,7 @@ def setup_db():
 
 def get_token(username):
     r = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         data={"username": username, "password": PASSWORD},
     )
     assert r.status_code == 200, r.text
@@ -186,34 +186,34 @@ def test_can_access_no_permission():
 # =====================================================
 
 def test_data_requires_auth():
-    for path in ("/competences", "/curricula", "/analytics/competence"):
+    for path in ("/api/v1/competences", "/api/v1/curricula", "/api/v1/analytics/competence"):
         assert client.get(path).status_code == 401
 
 
 def test_admin_sees_everything():
-    r = auth_get("/competences", "admin")
+    r = auth_get("/api/v1/competences", "admin")
     assert r.status_code == 200
     assert sources_of(r) == ["BUT", "Polytech"]
 
 
 def test_viewer_polytech_sees_only_polytech():
-    r = auth_get("/competences", "viewer_polytech")
+    r = auth_get("/api/v1/competences", "viewer_polytech")
     assert r.status_code == 200
     assert sources_of(r) == ["Polytech"]
 
 
 def test_viewer_but_sees_only_but():
-    r = auth_get("/competences", "viewer_but")
+    r = auth_get("/api/v1/competences", "viewer_but")
     assert sources_of(r) == ["BUT"]
 
 
 def test_viewer_star_sees_everything():
-    r = auth_get("/competences", "viewer_star")
+    r = auth_get("/api/v1/competences", "viewer_star")
     assert sources_of(r) == ["BUT", "Polytech"]
 
 
 def test_viewer_without_permission_sees_nothing():
-    r = auth_get("/competences", "viewer_rien")
+    r = auth_get("/api/v1/competences", "viewer_rien")
     assert r.status_code == 200
     assert r.json()["status"] == "empty"
     assert r.json()["data"] == []
@@ -221,19 +221,19 @@ def test_viewer_without_permission_sees_nothing():
 
 def test_scope_filtering_curriculum_only():
     # A le droit curriculum sur BUT, mais pas competence
-    r = auth_get("/competences", "viewer_curriculum_only")
+    r = auth_get("/api/v1/competences", "viewer_curriculum_only")
     assert r.json()["status"] == "empty"
 
-    r = auth_get("/curricula", "viewer_curriculum_only")
+    r = auth_get("/api/v1/curricula", "viewer_curriculum_only")
     assert sources_of(r) == ["BUT"]
 
 
 def test_analytics_filtering():
     # Le dossier analytics de test ne contient QUE Polytech
-    r = auth_get("/analytics/competence", "viewer_polytech")
+    r = auth_get("/api/v1/analytics/competence", "viewer_polytech")
     assert sources_of(r) == ["Polytech"]
 
-    r = auth_get("/analytics/competence", "viewer_but")
+    r = auth_get("/api/v1/analytics/competence", "viewer_but")
     assert r.json()["status"] == "empty"
 
 
@@ -242,12 +242,12 @@ def test_analytics_filtering():
 # =====================================================
 
 def test_pipeline_requires_auth():
-    assert client.post("/pipeline/run").status_code == 401
+    assert client.post("/api/v1/pipeline/run").status_code == 401
 
 
 def test_pipeline_forbidden_for_viewer():
     r = client.post(
-        "/pipeline/run",
+        "/api/v1/pipeline/run",
         headers={"Authorization": f"Bearer {get_token('viewer_star')}"},
     )
     assert r.status_code == 403
@@ -257,7 +257,7 @@ def test_pipeline_allowed_for_admin(monkeypatch):
     called = {}
     monkeypatch.setattr(main_module, "run_pipeline", lambda: called.setdefault("ok", True))
     r = client.post(
-        "/pipeline/run",
+        "/api/v1/pipeline/run",
         headers={"Authorization": f"Bearer {get_token('admin')}"},
     )
     assert r.status_code == 200
@@ -266,7 +266,7 @@ def test_pipeline_allowed_for_admin(monkeypatch):
 
 def test_pipeline_domain_forbidden_for_viewer():
     r = client.post(
-        "/pipeline/domain/competence",
+        "/api/v1/pipeline/domain/competence",
         headers={"Authorization": f"Bearer {get_token('viewer_polytech')}"},
     )
     assert r.status_code == 403

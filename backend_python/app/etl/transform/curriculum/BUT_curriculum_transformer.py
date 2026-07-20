@@ -14,17 +14,32 @@ Mapping lexique BUT → ForestED :
   AcquisApprentissage   →  AcquisApprentissage  (attaché à chaque élément)
 
 Design :
-  • BUTCurriculumTransformer  — classe de base, générique pour tous les BUT.
-    Aucun code programme, aucun code parcours, aucun label de feuille n'est
-    hardcodé ici. Tout ce qui est spécifique à un programme est configurable.
+  • BUTCurriculumTransformer — transformer générique pour tous les programmes
+    BUT (QLIO, INFO, GEA…). Aucun code programme ni code parcours n'est
+    hardcodé : l'identité du programme est résolue automatiquement depuis le
+    nom du fichier source (voir _resolve_programme_identity), PAS via une
+    classe de configuration.
 
-  • QLIOCurriculumTransformer — sous-classe QLIO : surcharge uniquement les
-    constantes d'identification du programme.
+  • Signature réelle : __init__(source_file_path=None).
+    Il n'existe PAS de BUTCurriculumConfig, PAS de paramètre config=,
+    PAS de sous-classe QLIOCurriculumTransformer.
+
+  • Le layout Excel (positions de colonnes et de lignes) est SPÉCIFIQUE au
+    format « Annexe » national BUT. Il est centralisé dans
+    _get_column_layout() : c'est le seul point à surcharger (par
+    sous-classe) si un programme BUT arrivait avec un layout différent.
 
   • Détection automatique :
       - codes parcours  → valeurs courtes MAJ en col 0 détectées à l'exécution
       - début des données → première ligne avec "UE X.X" en col 1
       - layout colonnes  → surchargeable via _get_column_layout()
+
+  • NOUVELLE SOURCE (UNITA, autre établissement…) : ne PAS copier ce
+    transformer. Ce fichier parse un layout Excel BUT précis. Si le format
+    d'entrée est différent, créer un Normalizer dédié (app/etl/normalize/)
+    qui produit des records homogènes, plus un Transformer sans connaissance
+    du format — sur le modèle du couple BUTCompetenceNormalizer /
+    BUTCompetenceTransformer — puis les enregistrer dans les factories.
 
   • IDs stables :
       - Élément  : S{sem}_{element_code}            (sans parcours)
@@ -120,21 +135,27 @@ class BUTCurriculumTransformer:
     """
     Transformer générique pour tous les programmes BUT.
 
-    La configuration du programme (id, nom, type…) est injectée via
-    BUTCurriculumConfig à l'instanciation — aucune constante hardcodée ici.
+    Signature réelle :
+        BUTCurriculumTransformer(source_file_path: str | None = None)
+
+    L'identité du programme (id, nom) n'est PAS injectée par une classe de
+    configuration : elle est résolue automatiquement depuis le nom du
+    fichier source (source_file_path, ou raw_data["file_name"] /
+    raw_data["source_file"] injecté par le pipeline) — voir
+    _resolve_programme_identity(). Ex. "QLIO_BUT__ANNEXE.xlsx" → "BUT_QLIO".
 
     Instanciation via le TransformerFactory (recommandé) :
-        config = BUTCurriculumConfig(
-            programme_id="BUT_QLIO",
-            programme_nom="BUT Qualité, Logistique Industrielle et Organisation",
-        )
-        transformer = BUTCurriculumTransformer(config=config)
-        result = transformer.transform(raw_data)
+        transformer = BUTCurriculumTransformer()
+        result = transformer.transform(raw_data)   # raw_data contient file_name
 
     Usage direct :
-        transformer = BUTCurriculumTransformer(
-            config=BUTCurriculumConfig(programme_id="BUT_INFO", programme_nom="BUT Informatique")
-        )
+        transformer = BUTCurriculumTransformer(source_file_path="INFO_BUT.xlsx")
+        result = transformer.transform(raw_data)
+
+    Le layout Excel (colonnes parcours/UE/AC, ligne d'en-têtes…) est
+    spécifique au format Annexe BUT et centralisé dans _get_column_layout().
+    Pour une source à format différent : ne pas copier ce transformer,
+    créer un Normalizer + Transformer dédiés (voir docstring du module).
     """
 
     # Marqueurs de contribution reconnus dans les cellules (croix APC)
@@ -1106,4 +1127,3 @@ class BUTCurriculumTransformer:
         for em in element_columns:
             self._element_nom_cache[em.code] = em.header
             self._element_type_cache[em.code] = em.type_
-
