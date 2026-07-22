@@ -54,9 +54,6 @@ LABEL_STYLE = {
 
 # Palette sémantique
 C_COMP   = "#6D28D9"
-C_AC_N1  = "#10B981"
-C_AC_N2  = "#F59E0B"
-C_AC_N3  = "#EF4444"
 C_MODULE = "#1D4ED8"
 
 # Arêtes — 2 niveaux : défaut visible, focus coloré
@@ -114,12 +111,6 @@ def get_ac_color_from_competence(competence_code, niveau, comp_order):
         return scheme["n3"]
 
     return "#CBD5E1"
-
-def _niveau_color(niveau):
-    try:
-        return {1: C_AC_N1, 2: C_AC_N2, 3: C_AC_N3}.get(int(niveau), "#94A3B8")
-    except Exception:
-        return "#94A3B8"
 
 def _niveau_label(niveau):
     return {"1": "Débutant", "2": "Intermédiaire", "3": "Avancé"}.get(str(niveau), "–")
@@ -817,9 +808,25 @@ def _build_graph_data(rows):
                        "comp_code": cc}
 
         if mi not in modules:
+            # Affichage seul : un module non rattaché à une vraie UE reçoit
+            # de l'ETL un pseudo-groupe "MODULE_<code>" (type "MODULE").
+            # Ce ne sont PAS des modules légitimement sans UE : leur UE
+            # existe côté source (learning_unit_code) mais n'a pas été
+            # reportée sur eux (trou de rattachement ETL — voir
+            # docs/IDU_UE_RATTACHEMENT_DIAGNOSTIC.md). On les regroupe donc
+            # sous "Sans UE" plutôt que de les afficher chacun comme sa
+            # propre UE. Ne change aucune donnée : uniquement le regroupement
+            # d'affichage dans le graphe pédagogique.
+            _ue_code = r.get("ue_code", "") or ""
+            _ue_type = str(r.get("ue_type") or "").upper()
+            _ue_name = r.get("ue_name", "")
+            if _ue_type == "MODULE" or _ue_code.startswith("MODULE_"):
+                _ue_code = ""       # -> "Sans UE" en aval
+                _ue_name = ""
             modules[mi] = {"name": r.get("module_name", ""),
                            "code": r.get("module_code", ""),
-                           "ue_code": r.get("ue_code", "")}
+                           "ue_code": _ue_code,
+                           "ue_name": _ue_name}
 
         if (cc, ac) not in seen_ca:
             edges_ca.append((cc, ac)); seen_ca.add((cc, ac))
@@ -869,6 +876,17 @@ def _should_cluster_ue(ue_module_ids, total_modules):
     if total_modules > MAX_DETAIL_MODULES and n > 2:
         return True
     return False
+
+
+def format_ue_label(ue_code, ue_name=None):
+    """Libellé d'UE : "UE503 — Sciences de l'ingénieur" ou "UE503" ou "Sans UE"."""
+    if not ue_code or str(ue_code).strip() == "":
+        return "Sans UE"
+    code = str(ue_code).strip()
+    name = str(ue_name or "").strip()
+    if name and name != code:
+        return f"{code} — {name}"
+    return code
 
 
 def _build_layout(comps, acs, modules, edges_am, expanded_clusters=None):
@@ -1184,6 +1202,7 @@ def _build_layout(comps, acs, modules, edges_am, expanded_clusters=None):
             "name": modules[mi]["name"],
             "code": modules[mi]["code"],
             "ue": modules[mi].get("ue_code") or "Sans UE",
+            "ue_name": modules[mi].get("ue_name", ""),
         }
 
     for ue, x in cluster_positions.items():
@@ -1202,9 +1221,11 @@ def _build_layout(comps, acs, modules, edges_am, expanded_clusters=None):
     # 9. Construire les libellés d'UE
     # ------------------------------------------------------------------
 
+    # Labels d'UE : les VRAIS codes issus du curriculum (UE503, UE603...),
+    # tries pour stabilite visuelle. "Sans UE" reste tel quel.
     ue_display = {
-        ue_code: f"UE{idx + 1}"
-        for idx, ue_code in enumerate(sorted(ue_x_ranges.keys(), key=str))
+        ue_code: str(ue_code)
+        for ue_code in sorted(ue_x_ranges.keys(), key=str)
     }
 
     return pos, node_meta, ue_display, ue_x_ranges, ue_module_map, ue_is_clustered, ue_expansion_blocked
@@ -1481,7 +1502,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
         mx.append(x); my.append(y)
         mhov.append(
             f"<b>{m['code'] or m['id']}</b><br>"
-            f"<i>{m['name']}</i><br>{ue_display.get(m['ue'], m['ue'])}<br><br>"
+            f"<i>{m['name']}</i><br>{format_ue_label(m['ue'], m.get('ue_name'))}<br><br>"
             f"🖱 Cliquez pour explorer"
         )
         mcd.append(key)
@@ -1498,13 +1519,19 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
         customdata=mcd, name="Modules", showlegend=True
     ))
 
+    # Mapping ue_code -> ue_name (depuis les modules) pour les hovers
+    ue_names = {}
+    for _m in node_meta.values():
+        if _m.get("type") == "module" and _m.get("ue_name"):
+            ue_names.setdefault(_m["ue"], _m["ue_name"])
+
     # ── Clusters d'UE ───────────────────────────────────────────────────
     klx, kly, klhov, klcd, klsz, klop, kltxt = [], [], [], [], [], [], []
     for key, m in node_meta.items():
         if m["type"] != "cluster": continue
         x, y = pos[key]
         klx.append(x); kly.append(y)
-        ue_label = ue_display.get(m["ue"], m["ue"])
+        ue_label = format_ue_label(m["ue"], ue_names.get(m["ue"]))
         kltxt.append(str(m["count"]))
         if m["ue"] in ue_expansion_blocked:
             klhov.append(
@@ -1579,13 +1606,23 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
     Y_UE_BAND_BOTTOM, Y_UE_BAND_TOP = 10.35, 11.65
     Y_UE_LABEL = 12.35
 
+    # Troncature de sécurité pour un code UE anormalement long (le hover
+    # garde toujours le libellé complet via format_ue_label). N'affecte
+    # que l'affichage, jamais la position, la couleur ni les données.
+    UE_LABEL_MAX_CHARS = 14
+
+    def _short_ue_label(label):
+        if len(label) > UE_LABEL_MAX_CHARS:
+            return label[:UE_LABEL_MAX_CHARS - 1] + "…"
+        return label
+
     ue_lx, ue_ly, ue_lt, ue_lcolor = [], [], [], []
     for i, uc in enumerate(ue_codes_sorted):
         color = UE_PALETTE[i % len(UE_PALETTE)]
         label = ue_display.get(uc, uc)
         ue_lx.append(label_centers[uc])
         ue_ly.append(Y_UE_LABEL)
-        ue_lt.append(f"<b>{label}</b>")
+        ue_lt.append(f"<b>{_short_ue_label(label)}</b>")
         ue_lcolor.append(color)
 
     if ue_lx:
@@ -1593,7 +1630,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
             x=ue_lx, y=ue_ly, mode="text",
             text=ue_lt, textfont=dict(size=10, color=ue_lcolor),
             hovertext=[
-                f"<b>{ue_display.get(uc, uc)}</b><br>{len(ue_module_map.get(uc, []))} module(s)"
+                f"<b>{format_ue_label(uc, ue_names.get(uc))}</b><br>{len(ue_module_map.get(uc, []))} module(s)"
                 f"{' (groupée)' if ue_is_clustered.get(uc) else ''}"
                 for uc in ue_codes_sorted
             ],
@@ -1857,8 +1894,6 @@ forested_visualisations_layout = html.Div([
     dcc.Store(id="selected-forest-node"),
     dcc.Store(id="vis-rows-store"),
     dcc.Store(id="expanded-clusters-store", data=[]),
-    dcc.Store(id="visualisation-state",
-              data={"level":0,"semester":None,"module":None}),
     html.Div(id="vis-focus-panel"),
 
     html.Div([

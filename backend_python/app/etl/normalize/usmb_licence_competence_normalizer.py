@@ -335,6 +335,32 @@ class USMBLicenceCompetenceNormalizer:
         if first_data is None:
             first_data = band_row + 1 + len(header_rows)
 
+        # Récupération des en-têtes de GROUPE fusionnées avec la ligne
+        # d'ancre. Cas générique USMB Licence (révélé par AES « Compétence
+        # 3 bis ») : la ligne des groupes (UAF/UAI/UAM…) est la MÊME que la
+        # ligne d'ancre « Acquis d'apprentissage » ; le scan ci-dessus
+        # démarre SOUS l'ancre et perd donc TOUS les ua_type de la feuille
+        # (chaque colonne retombe alors sur le bucket « UA » côté
+        # transformer). On rattrape ici toute ligne entre l'ancre et
+        # band_row qui porte de vraies en-têtes de groupe (tokens UA*) dans
+        # les colonnes EC, même si sa colonne A/B porte l'ancre ou une
+        # bande de période. Aucune règle spécifique à un programme.
+        def _row_carries_group_headers(r):
+            for c in range(ac_col + 1, width):
+                raw = _clean(val(r, c))
+                if not raw:
+                    continue
+                up = raw.upper()
+                if _UA_CODE_RE.search(up) or \
+                        (_UA_TYPE_RE.search(raw) and len(raw) < 30):
+                    return True
+            return False
+
+        for r in range(max(0, min(anchor_row, band_row)), band_row + 1):
+            if r not in header_rows and _row_carries_group_headers(r):
+                header_rows.append(r)
+        header_rows = sorted(set(header_rows))
+
         columns = self._classify_columns(rows, header_rows, ac_col,
                                          width, col_band, val)
         if not columns:

@@ -14,6 +14,7 @@ from forested_curricular_forest import (
     create_curricular_forest_figure,
     build_curricular_focus_panel,
 )
+from forested_palette import PALETTE_COMPETENCES
 
 try:
     from forested_visualisations import normalize_module_code, iter_curriculum_elements
@@ -42,67 +43,29 @@ LABEL_STYLE = {
 FADE      = "rgba(203,213,225,0.35)"
 FADE_LINE = "rgba(203,213,225,0.15)"
 
-PALETTE_ESS = [
-    {   # 0 — purple
-        "n1_fill":"#EEEDFE","n1_border":"#CECBF6","n1_text":"#3C3489",
-        "n2_fill":"#AFA9EC","n2_text":"#26215C",
-        "n3_fill":"#534AB7","n3_text":"#EEEDFE",
-        "root_fill":"#3C3489","root_text":"#EEEDFE","line":"#3C3489",
-    },
-    {   # 1 — teal
-        "n1_fill":"#E1F5EE","n1_border":"#9FE1CB","n1_text":"#085041",
-        "n2_fill":"#5DCAA5","n2_text":"#04342C",
-        "n3_fill":"#0F6E56","n3_text":"#E1F5EE",
-        "root_fill":"#085041","root_text":"#E1F5EE","line":"#085041",
-    },
-    {   # 2 — coral
-        "n1_fill":"#FAECE7","n1_border":"#F5C4B3","n1_text":"#712B13",
-        "n2_fill":"#F0997B","n2_text":"#4A1B0C",
-        "n3_fill":"#993C1D","n3_text":"#FAECE7",
-        "root_fill":"#712B13","root_text":"#FAECE7","line":"#712B13",
-    },
-    {   # 3 — cyan/teal (remplace l'ancien navy #0C447C, trop proche du violet)
-        "n1_fill":"#ECFEFF","n1_border":"#A5F3FC","n1_text":"#164E63",
-        "n2_fill":"#22D3EE","n2_text":"#083344",
-        "n3_fill":"#0E7490","n3_text":"#ECFEFF",
-        "root_fill":"#164E63","root_text":"#ECFEFF","line":"#164E63",
-    },
-    {   # 4 — amber
-        "n1_fill":"#FAEEDA","n1_border":"#FAC775","n1_text":"#633806",
-        "n2_fill":"#EF9F27","n2_text":"#412402",
-        "n3_fill":"#854F0B","n3_text":"#FAEEDA",
-        "root_fill":"#633806","root_text":"#FAEEDA","line":"#633806",
-    },
-    {   # 5 — green
-        "n1_fill":"#EAF3DE","n1_border":"#C0DD97","n1_text":"#27500A",
-        "n2_fill":"#97C459","n2_text":"#173404",
-        "n3_fill":"#3B6D11","n3_text":"#EAF3DE",
-        "root_fill":"#27500A","root_text":"#EAF3DE","line":"#27500A",
-    },
-    {   # 6 — pink
-        "n1_fill":"#FBEAF0","n1_border":"#F4C0D1","n1_text":"#72243E",
-        "n2_fill":"#ED93B1","n2_text":"#4B1528",
-        "n3_fill":"#993556","n3_text":"#FBEAF0",
-        "root_fill":"#72243E","root_text":"#FBEAF0","line":"#72243E",
-    },
-    {   # 7 — gray
-        "n1_fill":"#F1EFE8","n1_border":"#D3D1C7","n1_text":"#444441",
-        "n2_fill":"#B4B2A9","n2_text":"#2C2C2A",
-        "n3_fill":"#5F5E5A","n3_text":"#F1EFE8",
-        "root_fill":"#444441","root_text":"#F1EFE8","line":"#444441",
-    },
-]
-
-COMP_PALETTE = PALETTE_ESS
-
-
 def _comp_scheme(index):
-    cfg = PALETTE_ESS[index % len(PALETTE_ESS)]
+    """
+    Palette commune (forested_palette.PALETTE_COMPETENCES), identique a
+    celle utilisee par forested_visualisations.py (Graphe pedagogique),
+    forested_curricular_forest.py (Foret curriculaire, depuis le patch v10)
+    et forested_sunburst.py. Meme logique d'index qu'avant (index stable
+    par competence, calcule dans build_forest_rows) : seule la source des
+    couleurs change, la palette locale PALETTE_ESS est supprimee.
+
+    Pour le niveau 1, le remplissage est pale par construction (teinte
+    claire) : le "border" renvoye pour n1 est cfg["line"] (nettement plus
+    fonce) plutot que le remplissage lui-meme, pour rester lisible sur
+    fond blanc (compteurs, contours) - c'est exactement le role documente
+    de "line" dans forested_palette.py ("couleur de bordure"). Pour
+    n2/n3/root, le remplissage est deja assez fonce : le "border" reste
+    egal au remplissage, comme avant.
+    """
+    cfg = PALETTE_COMPETENCES[index % len(PALETTE_COMPETENCES)]
     return {
-        "n1":   (cfg["n1_fill"], cfg["n1_text"], cfg["n1_border"]),
-        "n2":   (cfg["n2_fill"], cfg["n2_text"], cfg["n2_fill"]),
-        "n3":   (cfg["n3_fill"], cfg["n3_text"], cfg["n3_fill"]),
-        "root": (cfg["root_fill"], cfg["root_text"], cfg["root_fill"]),
+        "n1":   (cfg["n1"], cfg["text"], cfg["line"]),
+        "n2":   (cfg["n2"], cfg["text"], cfg["n2"]),
+        "n3":   (cfg["n3"], cfg["text"], cfg["n3"]),
+        "root": (cfg["root"], cfg["text"], cfg["root"]),
         "line": cfg["line"],
     }
 
@@ -1526,8 +1489,8 @@ def register_callbacks(app):
                 0
             )
 
-            cfg = PALETTE_ESS[color_index % len(PALETTE_ESS)]
-            fill = cfg["n3_fill"]
+            cfg = PALETTE_COMPETENCES[color_index % len(PALETTE_COMPETENCES)]
+            fill = cfg["n3"]
             badge_style = {"width": "10px", "height": "10px", "borderRadius": "2px",
                            "backgroundColor": fill, "display": "inline-block", "marginRight": "4px"}
             comp_badges.append(
@@ -1537,7 +1500,7 @@ def register_callbacks(app):
                 ], style={"display": "flex", "alignItems": "center", "marginRight": "10px"})
             )
         if view_mode == "curricular_forest":
-            niveaux_txt = "Niveau de l'AC = contour du point : fin (N1) → épais (N3)"
+            niveaux_txt = "Niveau de l'AC = nuance de couleur : clair (N1) → foncé (N3)"
             lecture_txt = "Bas → haut : Semestre ◆ → UE ◇ → Module ■ → AC ●"
         else:
             niveaux_txt = "N1 pâle → N2 moyen → N3 saturé"

@@ -49,6 +49,7 @@ import unicodedata
 from app.etl.transform.base_transformer import BaseTransformer
 from app.models.curriculum_models import (
     ElementPedagogiqueFormatif,
+    GroupeElementsPedagogiquesComposite,
     GroupeElementsPedagogiquesElementaire,
     PeriodeProgramme,
     Programme,
@@ -69,12 +70,53 @@ _QUALITY_WARNING = (
 )
 
 _UA_FAMILY_RE = re.compile(r"^UA([A-Z])?", re.IGNORECASE)
+# Token de FAMILLE d'UA (UAF/UAI/UAM/UAT) isolé — sert à détecter les
+# en-têtes aberrants concaténant deux familles (ex. « UAI UAM »).
+_UA_FAMILY_TOKEN_RE = re.compile(r"\bUA[FIMT]\b", re.IGNORECASE)
 
 
 def _norm_code(text: str) -> str:
     text = unicodedata.normalize("NFKD", str(text or ""))
     text = "".join(c for c in text if not unicodedata.combining(c))
     return re.sub(r"[^A-Za-z0-9]+", "_", text.upper()).strip("_")
+
+
+def _strip_accents(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text or ""))
+    return "".join(c for c in text if not unicodedata.combining(c))
+
+
+def _canonical_group_code(ua_code, ua_type) -> str:
+    """Code de groupe STABLE et générique (USMB Licence).
+
+    - Un code EC/UA explicite avec chiffres (autres licences : UAF101…)
+      reste prioritaire et normalisé tel quel.
+    - Sinon on dérive le code de l'en-tête textuel : FAMILLE (UAF/UAI/UAM/
+      UAT) + reste concaténé. Cela FUSIONNE les variantes d'orthographe et
+      de casse d'une même unité entre les feuilles d'un même classeur
+      (« UAI Eco Entreprise » / « UAI EcoEntreprise » -> UAI_ECOENTREPRISE ;
+      « UAF droit » / « UAF Droit » -> UAF_DROIT ; « UAI EcodevLoc » /
+      « UAI EcoDevLoc » -> UAI_ECODEVLOC). Aucune table par module : la
+      vérité vient de la structure de la source.
+    """
+    if ua_code:
+        return _norm_code(ua_code)
+    raw = _strip_accents(str(ua_type or "").strip())
+    if not raw:
+        return "UA"
+    m = re.match(r"^(UA[FIMT]?)\b\s*(.*)$", raw, re.IGNORECASE)
+    if not m:
+        return _norm_code(raw)
+    family = m.group(1).upper()
+    rest = re.sub(r"[^A-Za-z0-9]+", "", m.group(2)).upper()
+    return f"{family}_{rest}" if rest else family
+
+
+def _is_aberrant_header(ua_type) -> bool:
+    """En-tête concaténant DEUX familles d'UA distinctes (ex. « UAI UAM »,
+    fusion mal saisie dans la source). Générique : pas de nom hardcodé."""
+    fams = {t.upper() for t in _UA_FAMILY_TOKEN_RE.findall(str(ua_type or ""))}
+    return len(fams) >= 2
 
 
 class USMBLicenceCurriculumTransformer(BaseTransformer):
@@ -124,6 +166,8 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
         groupes: dict = {}
         elements: dict = {}
         liens_sans_module = 0
+        aberrant_liens = 0
+        aberrant_headers: set = set()
 
         for rec in records:
             for lien in rec["liens"]:
@@ -136,7 +180,12 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
                 periode = self._get_or_create_periode(
                     programme, periodes, sem)
                 groupe = self._get_or_create_groupe(
-                    periode, groupes, sem, lien)
+                    periode, groupes, sem, lien, report)
+                if groupe is None:
+                    # en-tête aberrant (deux familles) : lien ignoré, le
+                    # module reste porté par son groupe valide (dédup).
+                    aberrant_liens += 1
+                    continue
                 self._get_or_create_element(
                     groupe, elements, sem, module_code,
                     lien.get("ec_libelle"))
@@ -149,10 +198,29 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
             )
 
         programme.periodes.sort(key=lambda p: p.numero)
+        dropped_empty: list = []
+        uai_composites: list = []
         for periode in programme.periodes:
+            # 1) supprimer les groupes élémentaires VIDES (ex. en-tête
+            #    résiduel, groupe dont tous les EC ont été dédupliqués
+            #    ailleurs) — aucun groupe vide ne doit subsister.
+            kept = []
+            for g in periode.groupes_elements_pedagogiques:
+                if g.elements_pedagogiques:
+                    kept.append(g)
+                else:
+                    dropped_empty.append(f"{periode.id}_{g.code}")
+            periode.groupes_elements_pedagogiques = kept
+            # 2) trier les EC de chaque groupe élémentaire
+            for g in periode.groupes_elements_pedagogiques:
+                g.elements_pedagogiques.sort(key=lambda e: e.id)
+            # 3) RÈGLE UAI (générique USMB Licence) : si le semestre
+            #    contient >= 2 groupes UAI, les regrouper sous un composite
+            #    « choix d'individualisation ». UAF/UAM/UA restent directs.
+            if self._wrap_uai_choice(periode):
+                uai_composites.append(periode.id)
+            # 4) trier les groupes de tête par code
             periode.groupes_elements_pedagogiques.sort(key=lambda g: g.code)
-            for groupe in periode.groupes_elements_pedagogiques:
-                groupe.elements_pedagogiques.sort(key=lambda e: e.id)
 
         flat_rows = self._flatten(programme)
 
@@ -172,6 +240,16 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
             report["warnings"].append(
                 f"{liens_sans_module} lien(s) sans semestre ou sans "
                 f"module_code ignorés côté curriculum.")
+        if aberrant_liens:
+            report["warnings"].append(
+                f"{aberrant_liens} lien(s) d'en-tête aberrant ignorés.")
+        report["dropped_empty_groups"] = dropped_empty
+        report["uai_composites"] = uai_composites
+        if uai_composites:
+            report["warnings"].append(
+                "Règle métier USMB : les groupes UAI (individualisation) "
+                "d'un semestre sont regroupés sous un composite « choix » "
+                f"quand il y en a plusieurs — semestres : {uai_composites}.")
 
         logger.info(
             "USMBLicenceCurriculumTransformer : %s -> %d périodes, %d UA, "
@@ -195,15 +273,31 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
             programme.periodes.append(periode)
         return periodes[sem]
 
-    def _get_or_create_groupe(self, periode, groupes, sem, lien):
+    def _get_or_create_groupe(self, periode, groupes, sem, lien, report):
         """UA -> Groupe Elementaire. Le parcours (bandes Droit, feuilles
         L3 STAPS) devient la `contrainte` du groupe — même mécanique que
-        les options BUT, lisible par le frontend."""
+        les options BUT, lisible par le frontend.
+
+        Le code est CANONIQUE (fusionne les variantes d'orthographe/casse
+        d'un même groupe entre feuilles). Un en-tête aberrant (deux
+        familles d'UA concaténées, ex. « UAI UAM ») n'est PAS matérialisé
+        en groupe : il est signalé au quality_report et son lien ignoré."""
         ua_code = lien.get("ua_code")
         ua_type = lien.get("ua_type")
         parcours = lien.get("parcours")
 
-        base = _norm_code(ua_code or ua_type or "UA")
+        if _is_aberrant_header(ua_type):
+            report.setdefault("aberrant_headers", [])
+            label = f"S{sem} : {ua_type!r}"
+            if label not in report["aberrant_headers"]:
+                report["aberrant_headers"].append(label)
+                report["warnings"].append(
+                    f"En-tête de groupe aberrant ignoré (deux familles "
+                    f"d'UA concaténées) : {label}. Module rattaché à son "
+                    f"groupe valide par ailleurs.")
+            return None
+
+        base = _canonical_group_code(ua_code, ua_type)
         key = (sem, base, parcours)
         if key in groupes:
             return groupes[key]
@@ -250,6 +344,32 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
         elements[key] = element
         return element
 
+    def _wrap_uai_choice(self, periode) -> bool:
+        """Regroupe les groupes UAI d'un semestre sous un composite quand
+        il y en a AU MOINS DEUX (règle métier USMB validée : UAI = unité
+        d'individualisation / choix). UAF, UAM et UA restent des groupes
+        directs, jamais enfants du composite. Un seul UAI -> reste direct
+        (pas de composite inutile). Générique, aucune spécificité programme.
+
+        Retourne True si un composite a été créé."""
+        groups = periode.groupes_elements_pedagogiques
+        uai = [g for g in groups if getattr(g, "type", None) == "UAI"]
+        if len(uai) < 2:
+            return False
+        others = [g for g in groups if getattr(g, "type", None) != "UAI"]
+        uai.sort(key=lambda g: g.code)
+        composite = GroupeElementsPedagogiquesComposite(
+            id=f"S{periode.numero}_UAI_CHOIX",
+            code="UAI",
+            intitule="UAI \u2014 choix d'individualisation",
+            credits=0.0,
+            type="UAI",
+            contrainte="Choix d'une UAI parmi les groupes proposés",
+            groupes_elements_pedagogiques=uai,
+        )
+        periode.groupes_elements_pedagogiques = others + [composite]
+        return True
+
     @staticmethod
     def _ua_family(ua_code, ua_type):
         """UAF101 -> 'UAF' ; 'UA Transv.' -> 'UAT' ; défaut 'UA'."""
@@ -271,15 +391,27 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
     # Flat (contrat R4, dialecte "ue")
     # ------------------------------------------------------------------
 
+    def _iter_leaf_elements(self, groupe):
+        """Yield (groupe_elementaire, element) en descendant les composites."""
+        sub = getattr(groupe, "groupes_elements_pedagogiques", None)
+        if sub is not None:
+            for child in sub:
+                yield from self._iter_leaf_elements(child)
+        else:
+            for element in groupe.elements_pedagogiques:
+                yield groupe, element
+
     def _flatten(self, programme):
         """Une ligne par EC. ac_id/ac_description sont présents mais VIDES :
         les liens AC↔EC sont portés par le domaine competence (validé —
         le contrat R4 exige les clés, pas leur contenu, comme pour les
         éléments sans AC de BUT/Polytech)."""
         rows = []
+        # _iter_leaf_elements descend les composites (règle UAI) pour émettre
+        # une ligne par EC en portant le groupe ÉLÉMENTAIRE réel (UAI_*).
         for periode in programme.periodes:
             for groupe in periode.groupes_elements_pedagogiques:
-                for element in groupe.elements_pedagogiques:
+                for leaf, element in self._iter_leaf_elements(groupe):
                     rows.append({
                         "programme_id": programme.id,
                         "programme_nom": programme.nom,
@@ -287,11 +419,11 @@ class USMBLicenceCurriculumTransformer(BaseTransformer):
                         "programme_niveau": programme.niveau,
                         "periode_id": periode.id,
                         "semestre": periode.numero,
-                        "ue_id": groupe.id,
-                        "ue_code": groupe.code,
-                        "ue_intitule": groupe.intitule,
-                        "ue_type": groupe.type,
-                        "parcours": groupe.contrainte or "COMMUN",
+                        "ue_id": leaf.id,
+                        "ue_code": leaf.code,
+                        "ue_intitule": leaf.intitule,
+                        "ue_type": leaf.type,
+                        "parcours": leaf.contrainte or "COMMUN",
                         "element_id": element.id,
                         "element_nom": element.nom,
                         "element_type": element.type,

@@ -8,9 +8,10 @@ partir des compétences, on part de l'organisation curriculaire (semestre
 puis UE) pour voir quels modules existent et quels AC ils couvrent.
 
 Ce module est volontairement AUTONOME (aucun import depuis
-forested_forest.py) pour éviter tout risque d'import circulaire. La
-palette de couleurs et quelques petits utilitaires génériques sont donc
-dupliqués ici en copies indépendantes plutôt que ré-importés.
+forested_forest.py) pour éviter tout risque d'import circulaire. Les
+petits utilitaires restent dupliqués pour éviter un import circulaire,
+mais la palette de compétences est importée depuis forested_palette afin
+de garantir la cohérence des couleurs.
 
 Affichage : les 4 couches Semestre → UE → Module → AC sont TOUJOURS
 dessinées, y compris en vue globale. Les AC sont de vrais nœuds (petits
@@ -18,7 +19,7 @@ points), toujours visibles. Le clic sert uniquement à réduire le
 sous-arbre affiché (zoom / focus), pas à révéler une couche qui serait
 sinon masquée.
 
-v4 : couleur AC stabilisée (_comp_stable_color_index) + libellé "AC".
+v4 : couleur AC stabilisée (_comp_stable_color_index, retirée en v10) + libellé "AC".
 v5 : remplissage AC passé à n2_fill (plus vif), contour niveau en
      épaisseur + nuance de gris, sélection en rouge.
 v6 : contour niveau dans la teinte de la compétence (plus de gris/rouge),
@@ -52,6 +53,11 @@ correctif correspondant dans forested_forest.py. La logique ci-dessous
 n'est donc plus le chemin utilisé en production, mais reste correcte et
 alignée si filter_curricular_rows est appelée directement avec un
 parcours_filter réel (usage autonome / tests).
+
+v10 : alignement strict des couleurs AC sur le graphe pédagogique via
+PALETTE_COMPETENCES ; suppression des contours AC dans la forêt
+curriculaire. Le niveau est porté par la nuance n1/n2/n3, comme dans le
+graphe pédagogique, et non plus par l'épaisseur/couleur du contour.
 """
 
 import re
@@ -59,47 +65,7 @@ import plotly.graph_objects as go
 from dash import html
 
 from forested_visualisations import empty_figure
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PALETTE COULEURS — copie volontairement indépendante de celle de
-#  forested_forest.py (voir note en tête de fichier).
-# ══════════════════════════════════════════════════════════════════════════════
-
-PALETTE_ESS = [
-    {"n1_fill":"#EEEDFE","n1_border":"#CECBF6","n1_text":"#3C3489",
-     "n2_fill":"#AFA9EC","n2_text":"#26215C",
-     "n3_fill":"#534AB7","n3_text":"#EEEDFE",
-     "root_fill":"#3C3489","root_text":"#EEEDFE","line":"#3C3489"},
-    {"n1_fill":"#E1F5EE","n1_border":"#9FE1CB","n1_text":"#085041",
-     "n2_fill":"#5DCAA5","n2_text":"#04342C",
-     "n3_fill":"#0F6E56","n3_text":"#E1F5EE",
-     "root_fill":"#085041","root_text":"#E1F5EE","line":"#085041"},
-    {"n1_fill":"#FAECE7","n1_border":"#F5C4B3","n1_text":"#712B13",
-     "n2_fill":"#F0997B","n2_text":"#4A1B0C",
-     "n3_fill":"#993C1D","n3_text":"#FAECE7",
-     "root_fill":"#712B13","root_text":"#FAECE7","line":"#712B13"},
-    {"n1_fill":"#ECFEFF","n1_border":"#A5F3FC","n1_text":"#164E63",
-     "n2_fill":"#22D3EE","n2_text":"#083344",
-     "n3_fill":"#0E7490","n3_text":"#ECFEFF",
-     "root_fill":"#164E63","root_text":"#ECFEFF","line":"#164E63"},
-    {"n1_fill":"#FAEEDA","n1_border":"#FAC775","n1_text":"#633806",
-     "n2_fill":"#EF9F27","n2_text":"#412402",
-     "n3_fill":"#854F0B","n3_text":"#FAEEDA",
-     "root_fill":"#633806","root_text":"#FAEEDA","line":"#633806"},
-    {"n1_fill":"#EAF3DE","n1_border":"#C0DD97","n1_text":"#27500A",
-     "n2_fill":"#97C459","n2_text":"#173404",
-     "n3_fill":"#3B6D11","n3_text":"#EAF3DE",
-     "root_fill":"#27500A","root_text":"#EAF3DE","line":"#27500A"},
-    {"n1_fill":"#FBEAF0","n1_border":"#F4C0D1","n1_text":"#72243E",
-     "n2_fill":"#ED93B1","n2_text":"#4B1528",
-     "n3_fill":"#993556","n3_text":"#FBEAF0",
-     "root_fill":"#72243E","root_text":"#FBEAF0","line":"#72243E"},
-    {"n1_fill":"#F1EFE8","n1_border":"#D3D1C7","n1_text":"#444441",
-     "n2_fill":"#B4B2A9","n2_text":"#2C2C2A",
-     "n3_fill":"#5F5E5A","n3_text":"#F1EFE8",
-     "root_fill":"#444441","root_text":"#F1EFE8","line":"#444441"},
-]
+from forested_palette import PALETTE_COMPETENCES
 
 
 def _niv_key(niv):
@@ -110,12 +76,7 @@ def _niv_key(niv):
     return {1: "n1", 2: "n2", 3: "n3"}.get(n, "n3")
 
 
-_NIV_BORDER_W = {"n1": 1.0, "n2": 2.0, "n3": 3.2}
 _NIV_LABEL = {"n1": "N1 — Débutant", "n2": "N2 — Intermédiaire", "n3": "N3 — Avancé"}
-
-# Contour niveau neutre (AC sans compétence rattachée uniquement) — tons
-# de gris doux, jamais noir pur ni rouge.
-_NIV_NEUTRAL_BORDER = {"n1": "#E2E8F0", "n2": "#94A3B8", "n3": "#475569"}
 
 CURR_SEM_COLOR = {"fill": "#334155", "text": "#F8FAFC", "border": "#1E293B"}
 CURR_UE_COLOR  = {"fill": "#E9EEF5", "text": "#1E293B", "border": "#64748B"}
@@ -125,37 +86,42 @@ CURR_AC_BASE_SIZE = 14
 CURR_AC_SEL_SIZE = 23
 
 
-def _niv_border_color(cfg, nk):
+def _curr_ac_color_from_competence(competence_code, niveau, comp_color_index=None,
+                                    local_comp_color_index=None):
     """
-    Couleur de contour pour un niveau donné, dans la même famille de
-    teinte que la compétence (cfg = entrée de PALETTE_ESS), plutôt qu'une
-    couleur neutre (gris/noir) ou d'alerte (rouge) qui casserait
-    l'harmonie de couleur de la compétence.
-    """
-    if cfg is None:
-        return _NIV_NEUTRAL_BORDER[nk]
-    return {"n1": cfg["n1_border"], "n2": cfg["n2_text"], "n3": cfg["line"]}[nk]
+    Couleur de remplissage d'un point AC, alignée sur la même palette et le
+    même mécanisme que le graphe pédagogique (get_ac_color_from_competence
+    dans forested_visualisations.py) : PALETTE_COMPETENCES, indexée par
+    compétence, nuancée par niveau (n1/n2/n3).
 
-
-def _comp_stable_color_index(competence_code):
-    """
-    Index de couleur stable pour une compétence, indépendant du
-    sous-ensemble de lignes actuellement affiché.
-
-    Pourquoi : calculer l'index via un `sorted(...) + enumerate` sur les
-    seules compétences présentes dans la vue courante fait changer la
-    couleur d'une compétence selon qu'on est en vue globale ou zoomée,
-    puisque son rang dans le sous-ensemble visible change. Ici on dérive
-    l'index directement du code lui-même (ex. "COMP_5" -> 5), donc la
-    couleur d'une compétence donnée est TOUJOURS la même, quelle que soit
-    la vue.
+    Priorité d'index :
+      1. comp_color_index (transmis par forested_forest.py — même couleur
+         que la forêt pédagogique et le graphe pédagogique) ;
+      2. local_comp_color_index (repli calculé localement dans
+         _render_curricular_tree, mêmes lignes affichées, même ordre
+         `sorted()` que comp_order côté graphe pédagogique) ;
+      3. index 0 par défaut si la compétence n'est dans aucun des deux.
     """
     if not competence_code:
-        return 0
-    m = re.search(r"(\d+)\s*$", str(competence_code))
-    if m:
-        return (int(m.group(1)) - 1) % len(PALETTE_ESS)
-    return abs(hash(str(competence_code))) % len(PALETTE_ESS)
+        return CURR_AC_NEUTRAL_FILL
+    if comp_color_index and competence_code in comp_color_index:
+        idx = comp_color_index[competence_code] % len(PALETTE_COMPETENCES)
+    elif local_comp_color_index and competence_code in local_comp_color_index:
+        idx = local_comp_color_index[competence_code] % len(PALETTE_COMPETENCES)
+    else:
+        idx = 0
+    scheme = PALETTE_COMPETENCES[idx]
+    try:
+        niveau = int(niveau)
+    except Exception:
+        niveau = 1
+    if niveau == 1:
+        return scheme["n1"]
+    if niveau == 2:
+        return scheme["n2"]
+    if niveau == 3:
+        return scheme["n3"]
+    return scheme["n1"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -283,6 +249,18 @@ def filter_curricular_rows(rows, sem_filter="ALL", parcours_filter="ALL", comp_f
     return result
 
 
+def _curr_group_code(r):
+    """Code du groupe AFFICHÉ dans la forêt curriculaire.
+
+    Quand la ligne provient d'un groupe COMPOSITE (option_code présent —
+    ex. « UAI — choix d'individualisation » -> UAI_PRO / UAI_ECOENTREPRISE
+    / UAI_CONCOURS…), on affiche le SOUS-GROUPE réel. Sinon (UAF/UAM/UA,
+    groupes simples sans option) on garde le ue_code : comportement
+    strictement inchangé pour les licences/sources sans composite.
+    """
+    return r.get("option_code") or r.get("ue_code") or "Sans UE"
+
+
 def filter_curricular_rows_by_click_selection(rows, selected):
     """
     Réduit les lignes brutes au sous-arbre cliqué, à la manière de
@@ -303,7 +281,7 @@ def filter_curricular_rows_by_click_selection(rows, selected):
         return [
             r for r in rows
             if _sem_label(r.get("semestre")) == sem
-            and (r.get("ue_code") or "Sans UE") == ue
+            and _curr_group_code(r) == ue
         ]
 
     if kind in ("module", "ac"):
@@ -311,7 +289,7 @@ def filter_curricular_rows_by_click_selection(rows, selected):
         return [
             r for r in rows
             if _sem_label(r.get("semestre")) == sem
-            and (r.get("ue_code") or "Sans UE") == ue
+            and _curr_group_code(r) == ue
             and (r.get("module_code") or r.get("module_id")) == mod
         ]
 
@@ -352,10 +330,29 @@ def build_curricular_forest_data(rows):
         ue_name     = r.get("ue_name") or ue_code
         module_name = r.get("module_name") or module_code
 
+        # Groupe AFFICHÉ = sous-groupe réel si la ligne vient d'un composite
+        # (option_code présent), sinon le ue_code simple. Le parent (UAI —
+        # choix…) est conservé pour le hover. UAF/UAM/UA (sans option)
+        # restent inchangés : group_code == ue_code, parent absent.
+        option_code = r.get("option_code")
+        if option_code:
+            group_code  = option_code
+            group_name  = r.get("option_name") or option_code
+            parent_code = ue_code
+            parent_name = ue_name
+        else:
+            group_code  = ue_code
+            group_name  = ue_name
+            parent_code = None
+            parent_name = None
+
         sem_entry = semesters.setdefault(sem_label, {"label": sem_label, "ues": {}})
-        ue_entry = sem_entry["ues"].setdefault(ue_code, {"code": ue_code, "name": ue_name, "modules": {}})
-        if ue_name and ue_name != ue_code and ue_entry["name"] == ue_code:
-            ue_entry["name"] = ue_name
+        ue_entry = sem_entry["ues"].setdefault(group_code, {
+            "code": group_code, "name": group_name,
+            "parent_code": parent_code, "parent_name": parent_name,
+            "modules": {}})
+        if group_name and group_name != group_code and ue_entry["name"] == group_code:
+            ue_entry["name"] = group_name
 
         mod_entry = ue_entry["modules"].setdefault(module_code, {"code": module_code, "name": module_name, "acs": {}})
 
@@ -535,17 +532,31 @@ def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL
     Moteur de rendu unique pour la forêt curriculaire : dessine toujours les
     4 couches Semestre → UE → Module → AC.
 
-    AC : petit point, couleur de remplissage = compétence parente (teinte
-    vive et STABLE quelle que soit la vue, via _comp_stable_color_index),
-    contour = niveau, dans la même famille de teinte que la compétence
-    (voir _niv_border_color). La hauteur n'est PAS utilisée pour coder le
-    niveau. La sélection ne change pas de couleur : uniquement la taille.
+    AC : petit point, couleur de remplissage = compétence parente, nuancée
+    par niveau (n1/n2/n3), exactement comme le graphe pédagogique
+    (PALETTE_COMPETENCES via _curr_ac_color_from_competence). Aucun contour
+    n'est dessiné autour des AC : le niveau est porté par la nuance de
+    couleur, pas par l'épaisseur/couleur du contour. La sélection ne change
+    pas de couleur : uniquement la taille.
     """
     if not rows:
         return empty_figure("Aucune donnée disponible pour cette sélection.")
 
     data = build_curricular_forest_data(rows)
     semesters = data["semesters"]
+
+    # Repli local : même ordre `sorted()` que comp_order côté graphe
+    # pédagogique, calculé sur les compétences réellement présentes dans
+    # les lignes affichées. N'est utilisé que si comp_color_index (transmis
+    # par forested_forest.py) est absent ou ne connaît pas la compétence.
+    local_comp_color_index = {
+        code: idx
+        for idx, code in enumerate(sorted({
+            r.get("competence_code")
+            for r in rows
+            if r.get("competence_code")
+        }))
+    }
 
     n_mod_total = sum(len(ue["modules"]) for sem in semesters.values() for ue in sem["ues"].values())
     if n_mod_total == 0:
@@ -589,28 +600,19 @@ def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL
         fig.add_trace(go.Scatter(x=tx3, y=ty3, mode="lines",
             line=dict(color="#CBD5E1", width=0.9), opacity=0.4, hoverinfo="none", showlegend=False))
 
-    # ── AC : petits points — remplissage = compétence, contour = niveau ──────
+    # ── AC : petits points — remplissage = compétence + niveau, SANS contour ──
     ac_code_sel = selected.get("ac_code") if _sel_get(selected, "type") == "ac" else None
-    ax_, ay_, ahov, acd, asize, alw, afill, abrd = [], [], [], [], [], [], [], []
+    ax_, ay_, ahov, acd, asize, afill = [], [], [], [], [], []
     for (sl, uc, mc, ac_code), x in pos_ac.items():
         ac = semesters[sl]["ues"][uc]["modules"][mc]["acs"][ac_code]
         cc = ac.get("competence_code")
         niv = ac.get("niveau")
         nk = _niv_key(niv)
-        if cc:
-            # Priorité au mapping unifié transmis par forested_forest.py
-            # (même couleur que la forêt pédagogique) ; repli sur l'index
-            # dérivé du code pour un usage autonome de ce module.
-            if comp_color_index and cc in comp_color_index:
-                idx = comp_color_index[cc] % len(PALETTE_ESS)
-            else:
-                idx = _comp_stable_color_index(cc)
-            cfg = PALETTE_ESS[idx]
-            fill = cfg["n2_fill"]
-            border = _niv_border_color(cfg, nk)
-        else:
-            fill = CURR_AC_NEUTRAL_FILL
-            border = _niv_border_color(None, nk)
+        fill = _curr_ac_color_from_competence(
+            cc, niv,
+            comp_color_index=comp_color_index,
+            local_comp_color_index=local_comp_color_index,
+        )
         desc = ac.get("description", "")
         is_sel = ac_code == ac_code_sel
         ax_.append(x); ay_.append(CURR_Y_AC)
@@ -622,12 +624,10 @@ def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL
         acd.append({"type": "ac", "id": f"{sl}::{uc}::{mc}::{ac_code}",
                     "semester": sl, "ue_code": uc, "module_code": mc, "ac_code": ac_code})
         asize.append(CURR_AC_SEL_SIZE if is_sel else CURR_AC_BASE_SIZE)
-        alw.append(_NIV_BORDER_W[nk])
         afill.append(fill)
-        abrd.append(border)
     if ax_:
         fig.add_trace(go.Scatter(x=ax_, y=ay_, mode="markers",
-            marker=dict(symbol="circle", size=asize, color=afill, line=dict(width=alw, color=abrd)),
+            marker=dict(symbol="circle", size=asize, color=afill, line=dict(width=0)),
             hovertext=ahov, hoverinfo="text",
             hoverlabel=dict(bgcolor="#1E293B", bordercolor="white", font=dict(color="white", size=12)),
             customdata=acd, showlegend=False, name="AC"))
@@ -659,7 +659,10 @@ def _render_curricular_tree(rows, selected=None, min_x_span=CURR_MIN_X_SPAN_FULL
         ue = semesters[sl]["ues"][uc]
         n_mod = len(ue["modules"]); n_ac = sum(len(m["acs"]) for m in ue["modules"].values())
         ux_.append(x); uy_.append(CURR_Y_UE)
-        uhov.append(f"<b>{uc} — {ue['name']}</b><br>Semestre : {sl}<br>Modules : {n_mod}<br>"
+        parent_line = ""
+        if ue.get("parent_code"):
+            parent_line = f"Parent : {ue.get('parent_name') or ue['parent_code']}<br>"
+        uhov.append(f"<b>{uc} — {ue['name']}</b><br>{parent_line}Semestre : {sl}<br>Modules : {n_mod}<br>"
                      f"AC couverts : {n_ac}<br>🖱 Cliquez pour zoomer")
         ucd.append({"type": "ue", "id": f"{sl}::{uc}", "semester": sl, "ue_code": uc})
     if ux_:
