@@ -64,11 +64,19 @@ NORMALIZERS = {
         "app.etl.normalize.usmb_licence_competence_normalizer",
         "USMBLicenceCompetenceNormalizer",
     ),
+    ("competence", "unita"): (
+        "app.etl.normalize.unita_competence_normalizer",
+        "UNITACompetenceNormalizer",
+    ),
     ("curriculum", "usmb_licence"): (
         # MÊME normalizer que le domaine competence : il extrait déjà
         # semestre / UA / EC / module_code / parcours dans les liens.
         "app.etl.normalize.usmb_licence_competence_normalizer",
         "USMBLicenceCompetenceNormalizer",
+    ),
+    ("curriculum", "unita"): (
+        "app.etl.normalize.unita_curriculum_normalizer",
+        "UNITACurriculumNormalizer",
     ),
     # curriculum BUT/Polytech : aucun normalizer dédié -> Passthrough.
 }

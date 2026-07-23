@@ -50,6 +50,10 @@ TRANSFORMERS = {
         "app.etl.transform.competence.USMB_licence_competence_transformer",
         "USMBLicenceCompetenceTransformer",
     ),
+    ("competence", "unita"): (
+        "app.etl.transform.competence.UNITA_competence_transformer",
+        "UNITACompetenceTransformer",
+    ),
     ("curriculum", "polytech"): (
         "app.etl.transform.curriculum.Polytech_curriculum_transformer",
         "PolytechCurriculumTransformer",
@@ -57,6 +61,10 @@ TRANSFORMERS = {
     ("curriculum", "but"): (
         "app.etl.transform.curriculum.BUT_curriculum_transformer",
         "BUTCurriculumTransformer",
+    ),
+    ("curriculum", "unita"): (
+        "app.etl.transform.curriculum.UNITA_curriculum_transformer",
+        "UNITACurriculumTransformer",
     ),
     ("curriculum", "usmb_licence"): (
         # Curriculum « LITE » (v2) : squelette Semestre→UA→EC reconstruit

@@ -1,0 +1,469 @@
+{
+  "programme_id": "JB_SCRL",
+  "programme_nom": "Joint Bachelor in Strategic Communication & Business in Romance Languages",
+  "source_name": "unita",
+  "scope": "generic",
+  "institution": null,
+  "type": "Joint Bachelor",
+  "niveau": "Bac+3",
+  "curriculum_kind": "generic_input",
+  "periodes": [
+    {
+      "id": "A1",
+      "numero": 1,
+      "label": "Year 1 (indicative)",
+      "ects": 0.0,
+      "groupes_elements_pedagogiques": [
+        {
+          "id": "LANG_A1",
+          "code": "LANG_A1",
+          "intitule": "Language modules - Year 1",
+          "type": "LANGUAGE",
+          "contrainte": null,
+          "credits": 0.0,
+          "elements_pedagogiques": [
+            {
+              "id": "UNITA_M1",
+              "code": "UNITA_M1",
+              "nom": "Language B - Independent User I (A2/B1 -> B1)",
+              "type": "language_module",
+              "credits": 15.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_M1_MLO01",
+                  "description": "Understand the main points of clear standard speech and written texts on familiar academic, social and professional topics."
+                },
+                {
+                  "id": "UNITA_M1_MLO02",
+                  "description": "articipate in routine conversations and discussions, exchanging information and expressing opinions with reasonable fluency."
+                },
+                {
+                  "id": "UNITA_M1_MLO03",
+                  "description": "Produce connected oral and written texts describing experiences, plans, events and viewpoints."
+                },
+                {
+                  "id": "UNITA_M1_MLO04",
+                  "description": "Apply core grammatical structures and vocabulary accurately enough to communicate effectively in familiar contexts."
+                },
+                {
+                  "id": "UNITA_M1_MLO05",
+                  "description": "Recognise similarities and differences between Romance languages and apply intercomprehension strategies to support comprehension."
+                },
+                {
+                  "id": "UNITA_M1_MLO06",
+                  "description": "Demonstrate awareness of cultural conventions and communication norms in Romance-language communities."
+                },
+                {
+                  "id": "UNITA_M1_MLO07",
+                  "description": "Mediate simple information between speakers or texts from different linguistic backgrounds."
+                },
+                {
+                  "id": "UNITA_M1_MLO08",
+                  "description": "Work collaboratively in multilingual learning environments using appropriate communication strategies."
+                },
+                {
+                  "id": "UNITA_M1_MLO09",
+                  "description": "Reflect on their language learning process and identify strategies for autonomous language development."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_M2",
+              "code": "UNITA_M2",
+              "nom": "Language C - Basic User (A1 -> A2)",
+              "type": "language_module",
+              "credits": 15.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_M2_MLO01",
+                  "description": "Understand simple spoken and written messages related to everyday situations."
+                },
+                {
+                  "id": "UNITA_M2_MLO02",
+                  "description": "Use basic vocabulary and grammatical structures to communicate personal information and everyday needs."
+                },
+                {
+                  "id": "UNITA_M2_MLO03",
+                  "description": "Participate in simple interactions involving greetings, requests, descriptions and routine exchanges."
+                },
+                {
+                  "id": "UNITA_M2_MLO04",
+                  "description": "Recognise fundamental phonological and grammatical features of the target language."
+                },
+                {
+                  "id": "UNITA_M2_MLO05",
+                  "description": "Apply basic intercomprehension strategies drawing on knowledge of other Romance languages"
+                },
+                {
+                  "id": "UNITA_M2_MLO06",
+                  "description": "Identify basic cultural practices and communication conventions associated with the target language."
+                },
+                {
+                  "id": "UNITA_M2_MLO07",
+                  "description": "Convey simple information from one language to another through basic mediation activities."
+                },
+                {
+                  "id": "UNITA_M2_MLO08",
+                  "description": "Use elementary digital and language-learning resources to support independent study"
+                },
+                {
+                  "id": "UNITA_M2_MLO09",
+                  "description": "Produce short oral and written texts on familiar topics."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "numero": 2,
+      "label": "Year 2 (indicative)",
+      "ects": 0.0,
+      "groupes_elements_pedagogiques": [
+        {
+          "id": "LANG_A2",
+          "code": "LANG_A2",
+          "intitule": "Language modules - Year 2",
+          "type": "LANGUAGE",
+          "contrainte": null,
+          "credits": 0.0,
+          "elements_pedagogiques": [
+            {
+              "id": "UNITA_M3",
+              "code": "UNITA_M3",
+              "nom": "Language B - Independent User II (B2/C1)",
+              "type": "language_module",
+              "credits": 15.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_M3_MLO01",
+                  "description": "Understand extended speech, professional presentations and complex written texts on academic and professional topics."
+                },
+                {
+                  "id": "UNITA_M3_MLO02",
+                  "description": "Communicate fluently and spontaneously with native and non-native speakers in a variety of contexts."
+                },
+                {
+                  "id": "UNITA_M3_MLO03",
+                  "description": "Produce clear, detailed and well-structured oral and written texts presenting arguments and supporting evidence."
+                },
+                {
+                  "id": "UNITA_M3_MLO04",
+                  "description": "Use advanced grammatical structures, discourse markers and stylistic conventions with a high degree of accuracy."
+                },
+                {
+                  "id": "UNITA_M3_MLO05",
+                  "description": "Apply specialised vocabulary related to business, strategic communication and professional environments."
+                },
+                {
+                  "id": "UNITA_M3_MLO06",
+                  "description": "Analyse and synthesise information from multiple sources and present it appropriately to different audiences."
+                },
+                {
+                  "id": "UNITA_M3_MLO07",
+                  "description": "Mediate complex information and viewpoints across linguistic and cultural boundaries."
+                },
+                {
+                  "id": "UNITA_M3_MLO08",
+                  "description": "Apply intercultural communication."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_M4",
+              "code": "UNITA_M4",
+              "nom": "Language C - Threshold User (A2 -> B1)",
+              "type": "language_module",
+              "credits": 15.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_M4_MLO01",
+                  "description": "Understand the main points of spoken and written texts on familiar academic and social topics."
+                },
+                {
+                  "id": "UNITA_M4_MLO02",
+                  "description": "Participate in conversations on topics related to everyday life, study and work."
+                },
+                {
+                  "id": "UNITA_M4_MLO03",
+                  "description": "Produce connected oral and written texts describing experiences, plans and opinions."
+                },
+                {
+                  "id": "UNITA_M4_MLO04",
+                  "description": "Use a broad range of vocabulary and grammatical structures with increasing accuracy"
+                },
+                {
+                  "id": "UNITA_M4_MLO05",
+                  "description": "Recognise cultural norms and communication styles in target-language communities"
+                },
+                {
+                  "id": "UNITA_M4_MLO06",
+                  "description": "Employ intercomprehension strategies to interpret texts in related Romance languages"
+                },
+                {
+                  "id": "UNITA_M4_MLO07",
+                  "description": "Mediate straightforward information and messages between languages"
+                },
+                {
+                  "id": "UNITA_M4_MLO08",
+                  "description": "Demonstrate growing autonomy in language learning and communication."
+                },
+                {
+                  "id": "UNITA_M4_MLO09",
+                  "description": "Work effectively in intercultural learning contexts."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "numero": 3,
+      "label": "Year 3 (indicative)",
+      "ects": 0.0,
+      "groupes_elements_pedagogiques": [
+        {
+          "id": "LANG_A3",
+          "code": "LANG_A3",
+          "intitule": "Language modules - Year 3",
+          "type": "LANGUAGE",
+          "contrainte": null,
+          "credits": 0.0,
+          "elements_pedagogiques": [
+            {
+              "id": "UNITA_M5",
+              "code": "UNITA_M5",
+              "nom": "Language C - Independent User II (B1 -> B2)",
+              "type": "language_module",
+              "credits": 15.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_M5_MLO01",
+                  "description": "Interact with fluency and spontaneity in academic, social and workplace settings."
+                },
+                {
+                  "id": "UNITA_M5_MLO02",
+                  "description": "Use complex grammatical structures, discourse markers and appropriate registers effectively"
+                },
+                {
+                  "id": "UNITA_M5_MLO03",
+                  "description": "Employ specialised vocabulary relevant to business, corporate communication and professional contexts"
+                },
+                {
+                  "id": "UNITA_M5_MLO04",
+                  "description": "Apply advanced intercomprehension strategies across Romance languages"
+                },
+                {
+                  "id": "UNITA_M5_MLO05",
+                  "description": "Demonstrate intercultural competence and adaptability in multilingual environments"
+                },
+                {
+                  "id": "UNITA_M5_MLO06",
+                  "description": "Operate independently as a plurilingual communicator in academic and professional contexts"
+                },
+                {
+                  "id": "UNITA_M5_MLO07",
+                  "description": "Understand extended spoken and written discourse on concrete, abstract and professional topics."
+                },
+                {
+                  "id": "UNITA_M5_MLO08",
+                  "description": "Produce clear, detailed and coherent oral and written texts adapted to purpose and audience."
+                },
+                {
+                  "id": "UNITA_M5_MLO09",
+                  "description": "Analyse, summarise and evaluate information from diverse sources."
+                },
+                {
+                  "id": "UNITA_M5_MLO10",
+                  "description": "Mediate meaning, information and viewpoints between speakers and texts from different linguistic and cultural backgrounds."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "COMMON",
+      "numero": -1,
+      "label": "Business / common modules (year not specified by source)",
+      "ects": 0.0,
+      "groupes_elements_pedagogiques": [
+        {
+          "id": "BUSINESS_COMMON",
+          "code": "BUSINESS_COMMON",
+          "intitule": "Business / common modules",
+          "type": "BUSINESS",
+          "contrainte": null,
+          "credits": 0.0,
+          "elements_pedagogiques": [
+            {
+              "id": "UNITA_BUSINESS",
+              "code": "UNITA_BUSINESS",
+              "nom": "Business",
+              "type": "business_module",
+              "credits": 6.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_BUSINESS_MLO01",
+                  "description": "Explain core business concepts (value creation, business models, basic organizational functions)."
+                },
+                {
+                  "id": "UNITA_BUSINESS_MLO02",
+                  "description": "Describe how key functions (marketing, operations, finance, HR) contribute to firm performance."
+                },
+                {
+                  "id": "UNITA_BUSINESS_MLO03",
+                  "description": "Apply basic analytical tools to describe a business situation using simple data and evidence."
+                },
+                {
+                  "id": "UNITA_BUSINESS_MLO04",
+                  "description": "Work effectively in teams and communicate a short business analysis in written and oral form."
+                },
+                {
+                  "id": "UNITA_BUSINESS_MLO05",
+                  "description": "Use common digital tools to search, structure, and present business information responsibly."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_ECONOMICS",
+              "code": "UNITA_ECONOMICS",
+              "nom": "Economics",
+              "type": "business_module",
+              "credits": 6.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_ECONOMICS_MLO01",
+                  "description": "Explain basic microeconomic concepts (scarcity, choice, supply and demand, elasticities)."
+                },
+                {
+                  "id": "UNITA_ECONOMICS_MLO02",
+                  "description": "Describe how markets work and identify common market failures at an introductory level."
+                },
+                {
+                  "id": "UNITA_ECONOMICS_MLO03",
+                  "description": "Explain basic macroeconomic concepts (GDP, inflation, unemployment, business cycles)."
+                },
+                {
+                  "id": "UNITA_ECONOMICS_MLO04",
+                  "description": "Interpret simple economic indicators and graphs to support basic reasoning."
+                },
+                {
+                  "id": "UNITA_ECONOMICS_MLO05",
+                  "description": "Discuss economic policy trade-offs using clear, non-technical arguments."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_FINANCE",
+              "code": "UNITA_FINANCE",
+              "nom": "Finance",
+              "type": "business_module",
+              "credits": 6.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_FINANCE_MLO01",
+                  "description": "Explain the time value of money and basic discounting concepts."
+                },
+                {
+                  "id": "UNITA_FINANCE_MLO02",
+                  "description": "Read and interpret basic financial statements (income statement, balance sheet, cash flow)."
+                },
+                {
+                  "id": "UNITA_FINANCE_MLO03",
+                  "description": "Use simple financial ratios to assess profitability, liquidity, and solvency."
+                },
+                {
+                  "id": "UNITA_FINANCE_MLO04",
+                  "description": "Describe risk/return intuition and the role of diversification at an introductory level."
+                },
+                {
+                  "id": "UNITA_FINANCE_MLO05",
+                  "description": "Build and communicate a basic financial analysis using spreadsheets."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_HR",
+              "code": "UNITA_HR",
+              "nom": "Human Resources",
+              "type": "business_module",
+              "credits": 6.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_HR_MLO01",
+                  "description": "Explain core HRM functions (staffing, development, performance, rewards) at an introductory level."
+                },
+                {
+                  "id": "UNITA_HR_MLO02",
+                  "description": "Describe the basics of motivation, job design, and teamwork in organizations."
+                },
+                {
+                  "id": "UNITA_HR_MLO03",
+                  "description": "Identify key principles of fair and ethical people management (diversity, inclusion, wellbeing)."
+                },
+                {
+                  "id": "UNITA_HR_MLO04",
+                  "description": "Apply basic tools for managing performance and feedback in simple scenarios."
+                },
+                {
+                  "id": "UNITA_HR_MLO05",
+                  "description": "Work in teams to propose a basic HR approach aligned with organizational goals."
+                }
+              ]
+            },
+            {
+              "id": "UNITA_MARKETING",
+              "code": "UNITA_MARKETING",
+              "nom": "Marketing",
+              "type": "business_module",
+              "credits": 6.0,
+              "volume_total": 0.0,
+              "acquis_apprentissage": [
+                {
+                  "id": "UNITA_MARKETING_MLO01",
+                  "description": "Explain core marketing concepts (needs, value proposition, segmentation, positioning)."
+                },
+                {
+                  "id": "UNITA_MARKETING_MLO02",
+                  "description": "Describe the marketing mix (product, price, place, promotion) at an introductory level."
+                },
+                {
+                  "id": "UNITA_MARKETING_MLO03",
+                  "description": "Apply a simple framework to analyze a market and propose basic marketing actions."
+                },
+                {
+                  "id": "UNITA_MARKETING_MLO04",
+                  "description": "Interpret basic market data (surveys, web metrics, simple experiments) at an introductory level."
+                },
+                {
+                  "id": "UNITA_MARKETING_MLO05",
+                  "description": "Communicate a concise marketing plan outline in teams."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source_of_truth": "Language ... JULY 2026.docx + 5 UNITA_Joint_Bachelor_Module_*.doc",
+    "curation_mode": "manual",
+    "generated_at": "2026-07-22T22:14:32.606790+00:00"
+  }
+}

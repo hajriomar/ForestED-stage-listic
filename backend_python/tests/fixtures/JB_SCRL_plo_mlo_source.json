@@ -1,0 +1,851 @@
+{
+  "source_name": "unita",
+  "programme_id": "JB_SCRL",
+  "programme_nom": "Joint Bachelor in Strategic Communication & Business in Romance Languages",
+  "reference_framework_name": "UNITA Joint Bachelor PLO/MLO Framework (JULY 2026)",
+  "vocabulary": {
+    "competence_label": "PLO",
+    "learning_outcome_label": "MLO",
+    "module_label": "module"
+  },
+  "institutions": [],
+  "plos": [
+    {
+      "code": "PLO1",
+      "label": "Analyze and solve complex challenges in public relations, advertising, marketing, and internal communications"
+    },
+    {
+      "code": "PLO2",
+      "label": "Interpret and analyze data effectively to enhance organizational performance."
+    },
+    {
+      "code": "PLO3",
+      "label": "Understand and apply the Sustainable Development Goals (SDGs) in communication to assess their impact on professional practices"
+    },
+    {
+      "code": "PLO4",
+      "label": "Master business language for specific purposes (LSP) to communicate effectively in professional contexts"
+    },
+    {
+      "code": "PLO5",
+      "label": "Apply languages appropriately within culture-specific contexts to facilitate intercultural communication"
+    },
+    {
+      "code": "PLO6",
+      "label": "Communicate efficiently and ethically across various settings, with an emphasis on social responsibility and cultural inclusivity"
+    },
+    {
+      "code": "PLO7",
+      "label": "Apply social skills, such as presentation techniques and teamwork, in professional contexts"
+    },
+    {
+      "code": "PLO8",
+      "label": "Utilize digital skills proficiently across diverse professional environments"
+    },
+    {
+      "code": "PLO9",
+      "label": "Develop leadership skills, with a focus on managing projects effectively"
+    },
+    {
+      "code": "PLO10",
+      "label": "Understand and describe the basic functioning of a business"
+    },
+    {
+      "code": "PLO11",
+      "label": "Identify the key European institutions and explain the main European policies"
+    },
+    {
+      "code": "PLO12",
+      "label": "Apply communication skills with a commitment to social responsibility, cultural inclusivity, and ethical standards"
+    }
+  ],
+  "modules": [
+    {
+      "module_code": "UNITA_M1",
+      "scope": "generic",
+      "track": "language",
+      "title": "Language B - Independent User I (A2/B1 -> B1)",
+      "alignment_level": "source_declared",
+      "alignment_source": "language_module_mlo_plo_table",
+      "mlo_status": "complete",
+      "module_level_plos": [],
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_M1_MLO01",
+          "text": "Understand the main points of clear standard speech and written texts on familiar academic, social and professional topics.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO5"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO02",
+          "text": "articipate in routine conversations and discussions, exchanging information and expressing opinions with reasonable fluency.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6",
+            "PLO7"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO03",
+          "text": "Produce connected oral and written texts describing experiences, plans, events and viewpoints.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO04",
+          "text": "Apply core grammatical structures and vocabulary accurately enough to communicate effectively in familiar contexts.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO05",
+          "text": "Recognise similarities and differences between Romance languages and apply intercomprehension strategies to support comprehension.",
+          "aligned_plos": [
+            "PLO5"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO06",
+          "text": "Demonstrate awareness of cultural conventions and communication norms in Romance-language communities.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO07",
+          "text": "Mediate simple information between speakers or texts from different linguistic backgrounds.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO08",
+          "text": "Work collaboratively in multilingual learning environments using appropriate communication strategies.",
+          "aligned_plos": [
+            "PLO6",
+            "PLO7",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M1_MLO09",
+          "text": "Reflect on their language learning process and identify strategies for autonomous language development.",
+          "aligned_plos": [
+            "PLO8"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_M2",
+      "scope": "generic",
+      "track": "language",
+      "title": "Language C - Basic User (A1 -> A2)",
+      "alignment_level": "source_declared",
+      "alignment_source": "language_module_mlo_plo_table",
+      "mlo_status": "complete",
+      "module_level_plos": [],
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_M2_MLO01",
+          "text": "Understand simple spoken and written messages related to everyday situations.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO02",
+          "text": "Use basic vocabulary and grammatical structures to communicate personal information and everyday needs.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO03",
+          "text": "Participate in simple interactions involving greetings, requests, descriptions and routine exchanges.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO04",
+          "text": "Recognise fundamental phonological and grammatical features of the target language.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO05",
+          "text": "Apply basic intercomprehension strategies drawing on knowledge of other Romance languages",
+          "aligned_plos": [
+            "PLO5"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO06",
+          "text": "Identify basic cultural practices and communication conventions associated with the target language.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO07",
+          "text": "Convey simple information from one language to another through basic mediation activities.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO08",
+          "text": "Use elementary digital and language-learning resources to support independent study",
+          "aligned_plos": [
+            "PLO8"
+          ]
+        },
+        {
+          "code": "UNITA_M2_MLO09",
+          "text": "Produce short oral and written texts on familiar topics.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_M3",
+      "scope": "generic",
+      "track": "language",
+      "title": "Language B - Independent User II (B2/C1)",
+      "alignment_level": "source_declared",
+      "alignment_source": "language_module_mlo_plo_table",
+      "mlo_status": "complete",
+      "module_level_plos": [],
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_M3_MLO01",
+          "text": "Understand extended speech, professional presentations and complex written texts on academic and professional topics.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO02",
+          "text": "Communicate fluently and spontaneously with native and non-native speakers in a variety of contexts.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO03",
+          "text": "Produce clear, detailed and well-structured oral and written texts presenting arguments and supporting evidence.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO04",
+          "text": "Use advanced grammatical structures, discourse markers and stylistic conventions with a high degree of accuracy.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6",
+            "PLO7"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO05",
+          "text": "Apply specialised vocabulary related to business, strategic communication and professional environments.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO06",
+          "text": "Analyse and synthesise information from multiple sources and present it appropriately to different audiences.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO07",
+          "text": "Mediate complex information and viewpoints across linguistic and cultural boundaries.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M3_MLO08",
+          "text": "Apply intercultural communication.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_M4",
+      "scope": "generic",
+      "track": "language",
+      "title": "Language C - Threshold User (A2 -> B1)",
+      "alignment_level": "source_declared",
+      "alignment_source": "language_module_mlo_plo_table",
+      "mlo_status": "complete",
+      "module_level_plos": [],
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_M4_MLO01",
+          "text": "Understand the main points of spoken and written texts on familiar academic and social topics.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO02",
+          "text": "Participate in conversations on topics related to everyday life, study and work.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO03",
+          "text": "Produce connected oral and written texts describing experiences, plans and opinions.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO04",
+          "text": "Use a broad range of vocabulary and grammatical structures with increasing accuracy",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO05",
+          "text": "Recognise cultural norms and communication styles in target-language communities",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO06",
+          "text": "Employ intercomprehension strategies to interpret texts in related Romance languages",
+          "aligned_plos": [
+            "PLO5"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO07",
+          "text": "Mediate straightforward information and messages between languages",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO08",
+          "text": "Demonstrate growing autonomy in language learning and communication.",
+          "aligned_plos": [
+            "PLO8"
+          ]
+        },
+        {
+          "code": "UNITA_M4_MLO09",
+          "text": "Work effectively in intercultural learning contexts.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO7"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_M5",
+      "scope": "generic",
+      "track": "language",
+      "title": "Language C - Independent User II (B1 -> B2)",
+      "alignment_level": "source_declared",
+      "alignment_source": "language_module_mlo_plo_table",
+      "mlo_status": "complete",
+      "module_level_plos": [],
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_M5_MLO01",
+          "text": "Interact with fluency and spontaneity in academic, social and workplace settings.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO02",
+          "text": "Use complex grammatical structures, discourse markers and appropriate registers effectively",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO03",
+          "text": "Employ specialised vocabulary relevant to business, corporate communication and professional contexts",
+          "aligned_plos": [
+            "PLO4",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO04",
+          "text": "Apply advanced intercomprehension strategies across Romance languages",
+          "aligned_plos": [
+            "PLO5"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO05",
+          "text": "Demonstrate intercultural competence and adaptability in multilingual environments",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO06",
+          "text": "Operate independently as a plurilingual communicator in academic and professional contexts",
+          "aligned_plos": [
+            "PLO4",
+            "PLO5",
+            "PLO6"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO07",
+          "text": "Understand extended spoken and written discourse on concrete, abstract and professional topics.",
+          "aligned_plos": [
+            "PLO4"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO08",
+          "text": "Produce clear, detailed and coherent oral and written texts adapted to purpose and audience.",
+          "aligned_plos": [
+            "PLO4",
+            "PLO6",
+            "PLO7"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO09",
+          "text": "Analyse, summarise and evaluate information from diverse sources.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8"
+          ]
+        },
+        {
+          "code": "UNITA_M5_MLO10",
+          "text": "Mediate meaning, information and viewpoints between speakers and texts from different linguistic and cultural backgrounds.",
+          "aligned_plos": [
+            "PLO5",
+            "PLO6",
+            "PLO12"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_BUSINESS",
+      "scope": "generic",
+      "track": "business",
+      "title": "Business",
+      "module_level_plos": [
+        "PLO2",
+        "PLO7",
+        "PLO8",
+        "PLO9",
+        "PLO10"
+      ],
+      "alignment_level": "module_projected",
+      "alignment_source": "module_checked_plos",
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_BUSINESS_MLO01",
+          "text": "Explain core business concepts (value creation, business models, basic organizational functions).",
+          "aligned_plos": [
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_BUSINESS_MLO02",
+          "text": "Describe how key functions (marketing, operations, finance, HR) contribute to firm performance.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_BUSINESS_MLO03",
+          "text": "Apply basic analytical tools to describe a business situation using simple data and evidence.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_BUSINESS_MLO04",
+          "text": "Work effectively in teams and communicate a short business analysis in written and oral form.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_BUSINESS_MLO05",
+          "text": "Use common digital tools to search, structure, and present business information responsibly.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_ECONOMICS",
+      "scope": "generic",
+      "track": "business",
+      "title": "Economics",
+      "module_level_plos": [
+        "PLO2",
+        "PLO8",
+        "PLO10",
+        "PLO11",
+        "PLO12"
+      ],
+      "alignment_level": "module_projected",
+      "alignment_source": "module_checked_plos",
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_ECONOMICS_MLO01",
+          "text": "Explain basic microeconomic concepts (scarcity, choice, supply and demand, elasticities).",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_ECONOMICS_MLO02",
+          "text": "Describe how markets work and identify common market failures at an introductory level.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_ECONOMICS_MLO03",
+          "text": "Explain basic macroeconomic concepts (GDP, inflation, unemployment, business cycles).",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_ECONOMICS_MLO04",
+          "text": "Interpret simple economic indicators and graphs to support basic reasoning.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11",
+            "PLO12"
+          ]
+        },
+        {
+          "code": "UNITA_ECONOMICS_MLO05",
+          "text": "Discuss economic policy trade-offs using clear, non-technical arguments.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11",
+            "PLO12"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_FINANCE",
+      "scope": "generic",
+      "track": "business",
+      "title": "Finance",
+      "module_level_plos": [
+        "PLO2",
+        "PLO8",
+        "PLO10",
+        "PLO11"
+      ],
+      "alignment_level": "module_projected",
+      "alignment_source": "module_checked_plos",
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_FINANCE_MLO01",
+          "text": "Explain the time value of money and basic discounting concepts.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_FINANCE_MLO02",
+          "text": "Read and interpret basic financial statements (income statement, balance sheet, cash flow).",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_FINANCE_MLO03",
+          "text": "Use simple financial ratios to assess profitability, liquidity, and solvency.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_FINANCE_MLO04",
+          "text": "Describe risk/return intuition and the role of diversification at an introductory level.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_FINANCE_MLO05",
+          "text": "Build and communicate a basic financial analysis using spreadsheets.",
+          "aligned_plos": [
+            "PLO2",
+            "PLO8",
+            "PLO10",
+            "PLO11"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_HR",
+      "scope": "generic",
+      "track": "business",
+      "title": "Human Resources",
+      "module_level_plos": [
+        "PLO1",
+        "PLO2",
+        "PLO7",
+        "PLO8",
+        "PLO9",
+        "PLO10"
+      ],
+      "alignment_level": "module_projected",
+      "alignment_source": "module_checked_plos",
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_HR_MLO01",
+          "text": "Explain core HRM functions (staffing, development, performance, rewards) at an introductory level.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_HR_MLO02",
+          "text": "Describe the basics of motivation, job design, and teamwork in organizations.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_HR_MLO03",
+          "text": "Identify key principles of fair and ethical people management (diversity, inclusion, wellbeing).",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_HR_MLO04",
+          "text": "Apply basic tools for managing performance and feedback in simple scenarios.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        },
+        {
+          "code": "UNITA_HR_MLO05",
+          "text": "Work in teams to propose a basic HR approach aligned with organizational goals.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO7",
+            "PLO8",
+            "PLO9",
+            "PLO10"
+          ]
+        }
+      ]
+    },
+    {
+      "module_code": "UNITA_MARKETING",
+      "scope": "generic",
+      "track": "business",
+      "title": "Marketing",
+      "module_level_plos": [
+        "PLO1",
+        "PLO2",
+        "PLO8",
+        "PLO9",
+        "PLO10",
+        "PLO11"
+      ],
+      "alignment_level": "module_projected",
+      "alignment_source": "module_checked_plos",
+      "module_learning_outcomes": [
+        {
+          "code": "UNITA_MARKETING_MLO01",
+          "text": "Explain core marketing concepts (needs, value proposition, segmentation, positioning).",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO8",
+            "PLO9",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_MARKETING_MLO02",
+          "text": "Describe the marketing mix (product, price, place, promotion) at an introductory level.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO8",
+            "PLO9",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_MARKETING_MLO03",
+          "text": "Apply a simple framework to analyze a market and propose basic marketing actions.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO8",
+            "PLO9",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_MARKETING_MLO04",
+          "text": "Interpret basic market data (surveys, web metrics, simple experiments) at an introductory level.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO8",
+            "PLO9",
+            "PLO10",
+            "PLO11"
+          ]
+        },
+        {
+          "code": "UNITA_MARKETING_MLO05",
+          "text": "Communicate a concise marketing plan outline in teams.",
+          "aligned_plos": [
+            "PLO1",
+            "PLO2",
+            "PLO8",
+            "PLO9",
+            "PLO10",
+            "PLO11"
+          ]
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source_of_truth": "Language Module Descriptions UNITA JOINT BA Updated Draft JULY 2026.docx + 5 UNITA_Joint_Bachelor_Module_*.doc",
+    "supersedes": "June 2026 language file (old JB_SCRL_plo_mlo_source.json regenerated, not patched)",
+    "curation_mode": "manual",
+    "generated_at": "2026-07-22T15:59:47.191507+00:00"
+  }
+}
