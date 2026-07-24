@@ -214,26 +214,22 @@ def test_generic_flat_and_canonical_contract(gen_res):
 
 
 # ---------------------------------------------------------------------------
-# 12-14. Chemin Excel USMB (parsing MINIMAL)
+# Chemin Excel USMB (parsing RÉEL — U3B)
 # ---------------------------------------------------------------------------
 
-def test_excel_routed_minimal(xls_norm):
-    assert xls_norm["input_kind"] == "usmb_excel"
-    assert xls_norm["scope"] == "institution_specific"
-    assert xls_norm["institution_code"] == "USMB"
-    assert xls_norm["upsert_institution_key"] == "USMB"
-    assert xls_norm["institutions"] == ["USMB"]
-    # 3 feuilles JD L1/L2/L3 -> 3 années squelette, aucun module.
-    assert len(xls_norm["periodes"]) == 3
-    assert xls_norm["quality_report"]["element_count"] == 0
-    assert xls_norm["quality_report"]["todo"]           # TODO explicites
-
-
-def test_excel_no_invented_modules(xls_res):
+def test_excel_parsed_semesters_s1_to_s6(xls_res):
+    # Les 6 semestres S1..S6 sont reconstruits depuis JD L1/L2/L3.
     prog = xls_res["canonical"]
-    assert len(prog.periodes) == 3
-    assert sum(1 for _ in _all_elements(prog)) == 0
-    assert xls_res["upsert"]["counts"]["elements"] == 0
+    assert sorted(p.numero for p in prog.periodes) == [1, 2, 3, 4, 5, 6]
+    assert {p.id for p in prog.periodes} == {"S1", "S2", "S3", "S4", "S5", "S6"}
+
+
+def test_excel_extracts_real_modules(xls_res):
+    # L'Excel ne produit plus 0 module : de vrais modules sont extraits.
+    n = sum(1 for _ in _all_elements(xls_res["canonical"]))
+    assert n > 20
+    assert xls_res["quality_report"]["element_count"] == n
+    assert xls_res["upsert"]["counts"]["elements"] == n
 
 
 def test_excel_scope_institution(xls_res):
@@ -243,9 +239,79 @@ def test_excel_scope_institution(xls_res):
     assert qr["institutions"] == ["USMB"]
     assert xls_res["institutions"] == ["USMB"]
     assert qr["plo_free"] is True
-    # clé technique d'upsert = "USMB" (une vraie institution), jamais "__GENERIC__"
     assert xls_res["upsert"]["upsert_institution_key"] == "USMB"
     assert xls_res["upsert"]["institution_code"] == "USMB"
     # canonical : Programme.institutions renseigné avec l'institution USMB
     assert len(xls_res["canonical"].institutions) == 1
     assert xls_res["canonical"].institutions[0].nom == "USMB"
+
+
+def test_excel_no_plo(xls_res):
+    blob = json.dumps(xls_res["flat"])
+    assert "PLO" not in blob and "aligned_plos" not in blob
+    for el in _all_elements(xls_res["canonical"]):
+        for a in el.acquis_apprentissage:
+            assert not hasattr(a, "aligned_plos")
+
+
+def test_excel_upsert_keys_unique(xls_res):
+    keys = [e["upsert_key"] for e in xls_res["upsert"]["elements"]]
+    assert keys and len(set(keys)) == len(keys)         # unique par module USMB
+    parts = keys[0].split("::")
+    assert parts[1] == "institution_specific" and parts[2] == "USMB"
+
+
+def test_generic_and_usmb_keys_disjoint(gen_res, xls_res):
+    gk = {e["upsert_key"] for e in gen_res["upsert"]["elements"]}
+    uk = {e["upsert_key"] for e in xls_res["upsert"]["elements"]}
+    assert gk and uk and gk.isdisjoint(uk)              # jamais de collision
+
+
+def test_excel_ambiguities_in_quality_report(xls_res):
+    amb = xls_res["quality_report"]["ambiguities"]
+    assert isinstance(amb, list) and len(amb) > 0
+    assert any("2 > 3" in a or "à vérifier" in a for a in amb)
+
+
+def test_excel_language_inference_prudent(xls_res):
+    # Inférence langue -> module générique, jamais 'exact'.
+    up = xls_res["upsert"]["elements"]
+    inferred = [e for e in up if e["match_status"] == "inferred"]
+    assert inferred
+    assert all(e["generic_module_code"].startswith("UNITA_M") for e in inferred)
+    assert all(e["match_status"] != "exact" for e in up)
+
+
+def test_excel_canonical_strict_no_tech_fields(xls_res):
+    # Aucun champ technique injecté dans le canonical (modèle strict) ;
+    # ils vivent uniquement dans flat / upsert.
+    prog = xls_res["canonical"]
+    assert not hasattr(prog, "scope")
+    for el in _all_elements(prog):
+        for f in ("generic_module_code", "match_status", "source_sheet",
+                  "scope", "institution_code", "upsert_key"):
+            assert not hasattr(el, f)
+    assert "generic_module_code" in xls_res["flat"][0]
+    assert "source_cell" in xls_res["flat"][0]
+
+
+def test_excel_contracts_ok(xls_res):
+    assert validate_curriculum_canonical(xls_res["canonical"]) == []
+    assert validate_flat_rows(xls_res["flat"], "curriculum") == []
+
+
+def test_excel_institution_hint_overrides_default():
+    # Sans hint -> USMB (défaut). Avec un hint (formulaire admin) -> cette
+    # institution (ex. HES-SO), sans hardcoder USMB.
+    if not os.path.exists(_EXCEL):
+        pytest.skip(f"Fixture Excel absente : {_EXCEL}")
+    env = extract_excel(_EXCEL)
+    env["institution_hint"] = "HESSO"
+    norm = NormalizerFactory.get_normalizer("curriculum", "unita").normalize(env)
+    res = TransformerFactory.get_transformer("curriculum", "unita").transform(norm)
+    assert res["quality_report"]["institution_code"] == "HESSO"
+    assert res["institutions"] == ["HESSO"]
+    assert res["canonical"].institutions[0].nom == "HESSO"
+    assert res["upsert"]["elements"]
+    assert all("::HESSO::" in e["upsert_key"]
+               for e in res["upsert"]["elements"])

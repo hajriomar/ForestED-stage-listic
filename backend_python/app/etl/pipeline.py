@@ -49,12 +49,26 @@ RAW_FOLDER       = "app/data/raw"
 PROCESSED_FOLDER = "app/data/processed"
 ANALYTICS_FOLDER = "app/data/analytics"
 
+def _safe_storage_key(value):
+    """Nettoie une clé de stockage issue du formulaire admin."""
+    if value is None:
+        return None
 
+    key = str(value).strip()
+    if not key:
+        return None
+
+    key = key.replace(" ", "_")
+
+    if "/" in key or "\\" in key or ".." in key:
+        raise ValueError("Nom de formation invalide.")
+
+    return key
 # ==========================================
 # PROCESS FILE
 # ==========================================
 
-def process_file(domain, source_name, file_path):
+def process_file(domain, source_name, file_path, institution=None, formation=None):
     """
     Traiter un fichier unique via le pipeline ETL.
 
@@ -65,6 +79,10 @@ def process_file(domain, source_name, file_path):
         domain      : "competence" | "curriculum"
         source_name : "but" | "polytech" | …
         file_path   : chemin du fichier source
+        institution : code institution optionnel (formulaire admin). Utilisé
+                      uniquement par les sources qui le comprennent (ex.
+                      curriculum/unita, chemin Excel institution-specific).
+                      Ignoré ailleurs -> comportement historique inchangé.
     """
     file_name = file_path.name
     logger.info(f"Processing [{domain}/{source_name}] : {file_name}")
@@ -76,6 +94,11 @@ def process_file(domain, source_name, file_path):
 
         extractor = ExtractorFactory.get_extractor(file_path)
         extracted = extractor(str(file_path))
+
+        # Indice d'institution transmis au normalizer via l'enveloppe (les
+        # autres normalizers ignorent cette clé -> aucun impact).
+        if institution and isinstance(extracted, dict):
+            extracted["institution_hint"] = institution
 
         # ==========================================
         # NORMALIZE                                 ← ajout
@@ -99,16 +122,61 @@ def process_file(domain, source_name, file_path):
         flat_data      = result.get("flat", [])
 
         # ==========================================
-        # SAVE CANONICAL
+        # SAVE CANONICAL / PROCESSED
         # ==========================================
 
         output_folder = Path(PROCESSED_FOLDER) / domain / source_name
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        output_file = output_folder / f"{file_path.stem}_processed.json"
-        load_json(canonical_data, str(output_file))
+        summary = {
+            "success": True,
+            "domain": domain,
+            "source": source_name,
+            "programme_id": getattr(canonical_data, "id", None),
+        }
 
-        logger.info(f"Generated canonical: {output_file}")
+        if (domain, source_name) == ("curriculum", "unita"):
+            # Multi-scope / multi-institution : on N'ÉCRASE PAS un fichier par
+            # upload. On UPSERT le result dans un processed PARTAGÉ au niveau
+            # programme (générique + institutions), sans toucher les autres
+            # institutions. L'ancien json_loader n'est PAS utilisé ici (il
+            # écraserait le fichier). Les autres sources gardent leur
+            # comportement historique.
+            from app.etl.load.curriculum_upsert_service import (
+                CurriculumUpsertService,
+            )
+            programme_key = (
+                _safe_storage_key(formation)
+                or _safe_storage_key(file_path.stem)
+                or summary["programme_id"]
+            )
+
+            output_file = output_folder / f"{programme_key}_processed.json"
+
+            up = CurriculumUpsertService().upsert_result(
+                result,
+                str(output_file),
+                programme_key=programme_key,
+            )
+            summary.update({
+                "programme_id": programme_key,
+                "output_path": str(output_file),
+                "added": up["added"],
+                "updated": up["updated"],
+                "total_elements": up["total_elements"],
+                "scopes": up["scopes"],
+                "institutions": up["institutions"],
+            })
+            logger.info(
+                "Upsert curriculum/unita -> %s (+%d / ~%d, total %d)",
+                output_file, up["added"], up["updated"], up["total_elements"],
+            )
+        else:
+            # Comportement historique : sauvegarde simple du canonique.
+            output_file = output_folder / f"{file_path.stem}_processed.json"
+            load_json(canonical_data, str(output_file))
+            summary["output_path"] = str(output_file)
+            logger.info(f"Generated canonical: {output_file}")
 
         # ==========================================
         # SAVE FLAT / ANALYTICS
@@ -136,6 +204,14 @@ def process_file(domain, source_name, file_path):
             with open(quality_file, "w", encoding="utf-8") as f:
                 json.dump(quality_report, f, indent=4, ensure_ascii=False)
             logger.info(f"Generated quality report: {quality_file}")
+            summary["quality_summary"] = {
+                "input_kind": quality_report.get("input_kind"),
+                "warnings": len(quality_report.get("warnings", []) or []),
+                "ambiguities": len(quality_report.get("ambiguities", []) or []),
+            }
+
+        summary["analytics_file"] = str(analytics_file)
+        return summary
 
     except FileNotFoundError as e:
         logger.error(f"File not found: {file_path} - {e}")

@@ -524,6 +524,20 @@ _section_upload = html.Div([
                                 placeholder="lettres/chiffres/_/-",
                                 style=INPUT)],
                      style={"marginBottom": "10px"}),
+            html.Div([
+                html.Label("Institution (optionnel)", style=LABEL),
+                dcc.Input(id="admin-upload-institution", type="text",
+                          placeholder="vide = générique ; ex. USMB, HESSO, UPPA",
+                          style=INPUT),
+                html.Div(
+                    "Institution concernée — optionnel. Laissez vide si le "
+                    "fichier décrit le curriculum générique UNITA. Renseignez "
+                    "une institution seulement si le fichier décrit une partie "
+                    "spécifique proposée par un campus ou partenaire "
+                    "(ex. USMB, HESSO, UPPA).",
+                    style={"fontFamily": FONT_FAMILY, "fontSize": "11.5px",
+                           "color": "#94A3B8", "marginTop": "4px"}),
+            ], style={"marginBottom": "10px"}),
         ]),
 
         # ── Mode fichier local ──
@@ -1123,12 +1137,13 @@ def register_callbacks(app):
         State("admin-upload-domain", "value"),
         State("admin-upload-source", "value"),
         State("admin-upload-formation", "value"),
+        State("admin-upload-institution", "value"),
         State("admin-upload-file", "contents"),
         State("admin-upload-file", "filename"),
         State("admin-refresh", "data"),
         prevent_initial_call=True,
     )
-    def upload_source(_n, domain, source, formation, contents,
+    def upload_source(_n, domain, source, formation, institution, contents,
                       filename, tick):
         if not domain:
             return "Choisissez un domaine.", MSG_ERR, no_update, tick
@@ -1150,21 +1165,44 @@ def register_callbacks(app):
             result = api_client.admin_upload_source(
                 auth_ui.current_token(), domain, source,
                 formation.strip(), filename, file_bytes,
+                institution=(institution or "").strip() or None,
             )
         except api_client.ApiError as exc:
             msg, style = _err(exc)
             return msg, style, no_update, tick
 
         outputs = result.get("outputs", {})
-        message = html.Div([
-            html.Div(f'Fichier traité avec succès : {result.get("file")}',
+        lines = [
+            html.Div(f'Import réussi : {result.get("file")}',
                      style={"fontWeight": "700"}),
-            html.Div(f'→ {outputs.get("processed", "")}'),
-            html.Div(f'→ {outputs.get("analytics", "")}'),
-            html.Div("Seul ce fichier a été traité ; les autres données "
-                     "n'ont pas été modifiées.",
-                     style={"color": "#64748B", "fontSize": "12px"}),
-        ])
+        ]
+        if "total_elements" in result:
+            # curriculum/unita : résumé multi-scope / multi-institution
+            insts = ", ".join(result.get("institutions") or []) \
+                or "générique (aucune institution)"
+            scopes = ", ".join(result.get("scopes") or []) or "—"
+            lines += [
+                html.Div(f'Éléments — ajoutés : {result.get("added", 0)} · '
+                         f'mis à jour : {result.get("updated", 0)} · '
+                         f'total : {result.get("total_elements", 0)}'),
+                html.Div(f'Scopes présents : {scopes}'),
+                html.Div(f'Institutions présentes : {insts}'),
+            ]
+            if result.get("output_path"):
+                lines.append(html.Div(
+                    f'Processed : {result.get("output_path")}',
+                    style={"fontSize": "12px", "color": "#64748B"}))
+        else:
+            lines += [
+                html.Div(f'→ {outputs.get("processed", "")}'),
+                html.Div(f'→ {outputs.get("analytics", "")}'),
+            ]
+        lines.append(html.Div(
+            "Seul ce fichier a été traité ; les autres données "
+            "n'ont pas été modifiées.",
+            style={"color": "#64748B", "fontSize": "12px"}))
+        message = html.Div(lines)
+
         logger.info("Upload OK depuis la page admin : %s",
                     result.get("file"))
         # contents remis à zéro pour éviter un double envoi accidentel

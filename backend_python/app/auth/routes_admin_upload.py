@@ -79,15 +79,28 @@ async def upload_source(
     domain: str = Form(...),
     source_name: str = Form(...),
     formation_name: str = Form(...),
+    institution: Optional[str] = Form(None),
     file: UploadFile = File(...),
     admin: User = Depends(require_admin),
 ) -> dict:
-    """Téléverse un fichier source et traite UNIQUEMENT ce fichier."""
+    """Téléverse un fichier source et traite UNIQUEMENT ce fichier.
+
+    `institution` (optionnel) : laissé vide -> curriculum générique ;
+    renseigné (ex. USMB, HESSO, UPPA) -> partie institution-specific.
+    N'a d'effet que pour les sources qui l'exploitent (curriculum/unita)."""
 
     # --- Validations ------------------------------------------------------
     domain = _validate_domain(domain)
     source_name = _validate_component(source_name, "source_name")
     formation_name = _validate_component(formation_name, "formation_name")
+
+    institution = (institution or "").strip()
+    if institution and not _SAFE_COMPONENT.match(institution):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Institution invalide : lettres/chiffres/_/- uniquement "
+                   "(ex. USMB, HESSO, UPPA). Laissez vide pour le générique.",
+        )
 
     original = Path(file.filename or "")
     extension = original.suffix.lower()
@@ -140,7 +153,13 @@ async def upload_source(
 
     # --- Traitement du SEUL fichier uploadé (jamais de run global) --------
     try:
-        process_file(domain, source_name, destination)
+        summary = process_file(
+            domain,
+            source_name,
+            destination,
+            institution=institution or None,
+            formation=formation_name,
+        )
     except Exception as exc:
         # Fichier rejeté : on ne laisse pas un fichier cassé dans raw/
         destination.unlink(missing_ok=True)
@@ -159,7 +178,10 @@ async def upload_source(
         final_name,
     )
 
-    return {
+    # Réponse historique (status/file/outputs) CONSERVÉE pour compat, +
+    # résumé pipeline remonté (curriculum/unita : add/update/scopes/
+    # institutions ; autres sources : programme_id/output_path).
+    response = {
         "status": "success",
         "file": f"{domain}/{source_name}/{final_name}",
         "outputs": {
@@ -169,6 +191,15 @@ async def upload_source(
                          f"{stem}_flat.json",
         },
     }
+    if isinstance(summary, dict):
+        response["domain"] = summary.get("domain", domain)
+        response["source"] = summary.get("source", source_name)
+        response["programme_id"] = summary.get("programme_id")
+        for key in ("output_path", "added", "updated", "total_elements",
+                    "scopes", "institutions", "quality_summary"):
+            if key in summary:
+                response[key] = summary[key]
+    return response
 
 
 # ══════════════════════════════════════════════════════════════════════════

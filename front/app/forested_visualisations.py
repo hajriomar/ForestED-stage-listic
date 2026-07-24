@@ -317,17 +317,56 @@ def get_ue_credits(ue):
     )
 
 
+def _extract_mlo_id_from_ac_code(ac_code):
+    """
+    Extrait l'identifiant MLO porté par un AC canonique UNITA.
+
+    Exemple UNITA :
+        PLO2__UNITA_FINANCE_MLO01 -> UNITA_FINANCE_MLO01
+
+    Pour les sources historiques (Polytech/BUT), les codes AC ne suivent pas
+    cette convention : on retourne None et la jointure module directe reste
+    utilisée comme avant.
+    """
+    if not ac_code:
+        return None
+
+    text = str(ac_code).strip()
+    if "__" not in text:
+        return None
+
+    mlo_id = text.rsplit("__", 1)[1].strip()
+    return mlo_id or None
+
+
+def _acquis_id(acquis):
+    """Retourne l'id d'un acquis/MLO curriculum sous forme stable."""
+    if not isinstance(acquis, dict):
+        return ""
+    return str(acquis.get("id") or "").strip()
+
+
 def build_competence_items(competence_data):
     """
-    Construit les liens :
-    Compétence -> AC -> modules
+    Construit les liens issus du référentiel de compétences.
+
+    Sortie : une ligne par lien AC -> module déclaré dans le référentiel.
 
     Supporte :
     - Polytech : ac.modules
-    - BUT : ac.modules, ac.ressources, ac.saes
+    - BUT      : ac.modules, ac.ressources, ac.saes
+    - UNITA    : ac.modules vers modules génériques + extraction du MLO
+                 depuis le code AC (PLOx__UNITA_..._MLOyy)
+
+    Important UNITA : le champ `mlo_id` permet ensuite de relier un module
+    spécifique USMB à un AC/PLO via ses `acquis_apprentissage`, sans créer de
+    lien direct module spécifique -> module générique dans le modèle.
     """
 
     comp_items = []
+
+    if not competence_data:
+        return comp_items
 
     for sous in competence_data.get("sous_classifications", []):
         for comp in sous.get("competences", []):
@@ -338,36 +377,43 @@ def build_competence_items(competence_data):
                 niveau_value = niveau.get("niveau")
 
                 for ac in niveau.get("apprentissages_critiques", []):
-                    modules = []
+                    ac_code = ac.get("code")
+                    ac_description = ac.get("description")
+                    mlo_id = _extract_mlo_id_from_ac_code(ac_code)
 
+                    modules = []
                     modules.extend(ac.get("modules", []))
                     modules.extend(ac.get("ressources", []))
                     modules.extend(ac.get("saes", []))
 
-                    # dédoublonnage en gardant l'ordre
-                    modules = list(dict.fromkeys(modules))
+                    # Dédoublonnage en gardant l'ordre.
+                    modules = list(dict.fromkeys(m for m in modules if m))
 
                     for module_code in modules:
-                        normalized_module_code = normalize_module_code(
-                            module_code
-                        )
+                        normalized_module_code = normalize_module_code(module_code)
 
                         if not normalized_module_code:
                             continue
 
                         comp_items.append({
-                        "sous_classification": sous.get("code"),
-                        "sous_classification_nom": sous.get("nom"),
+                            "sous_classification": sous.get("code"),
+                            "sous_classification_nom": sous.get("nom"),
 
-                        "competence_code": competence_code,
-                        "competence_name": competence_name,
+                            "competence_code": competence_code,
+                            "competence_name": competence_name,
 
-                        "niveau": niveau_value,
+                            "niveau": niveau_value,
 
-                        "ac_code": ac.get("code"),
-                        "ac_description": ac.get("description"),
+                            "ac_code": ac_code,
+                            "ac_description": ac_description,
 
-                        "module_code": normalized_module_code,
+                            # Module déclaré dans le référentiel de compétences
+                            # (module générique UNITA, module réel Polytech/BUT).
+                            "module_code": normalized_module_code,
+
+                            # MLO porté par l'AC canonique UNITA.
+                            # None pour les sources qui n'utilisent pas ce format.
+                            "mlo_id": mlo_id,
                         })
 
     return comp_items
@@ -378,14 +424,28 @@ def build_visualisation_rows(competence_data, curriculum_data):
     Construit les lignes utilisées par :
     - graphe pédagogique
     - heatmap
-    - ForestED
+    - forêt pédagogique
+    - forêt curriculaire
+    - sunburst
 
     Compatible avec :
     - données compétences seules (sans curriculum)
     - données curriculum seules (sans compétences)
     - les deux combinées
     - ancien modèle curriculum Polytech
-    - nouveau modèle curriculum BUT/Polytech
+    - nouveau modèle curriculum BUT/Polytech/UNITA
+
+    Point clé UNITA :
+    ----------------
+    Les modules spécifiques USMB ne sont pas liés directement aux modules
+    génériques. Ils héritent des MLO dans `acquis_apprentissage`.
+
+    La jointure complète fait donc deux chemins :
+      A. chemin historique : AC.modules -> module curriculum
+      B. chemin UNITA       : module.acquis_apprentissage[MLO] -> AC/PLO
+
+    Ainsi la visualisation affiche les modules spécifiques USMB quand ils
+    portent les mêmes MLO que les AC canoniques PLOx__MLO.
     """
 
     rows = []
@@ -522,14 +582,107 @@ def build_visualisation_rows(competence_data, curriculum_data):
     # ── Cas complet : Compétences + Curriculum ────────────────────────────────
     competence_items = build_competence_items(competence_data)
 
-    # Index module_code → liste de comp_items (pour lookup rapide)
+    # Index module_code -> liste de comp_items (chemin historique direct).
     comp_index = {}
-    for item in competence_items:
-        mc = item["module_code"]
-        comp_index.setdefault(mc, []).append(item)
+    # Index MLO_ID -> liste de comp_items (chemin UNITA via acquis_apprentissage).
+    mlo_index = {}
 
-    # Ensemble des modules trouvés dans le curriculum (pour détecter les orphelins)
+    for item in competence_items:
+        mc = item.get("module_code")
+        if mc:
+            comp_index.setdefault(mc, []).append(item)
+
+        mlo_id = item.get("mlo_id")
+        if mlo_id:
+            mlo_index.setdefault(mlo_id, []).append(item)
+
+    # Modules du référentiel déjà couverts par le curriculum. Sert uniquement
+    # à éviter d'ajouter en fin de fonction des faux "orphelins" génériques.
     curriculum_codes_found = set()
+
+
+    # UNITA : le fichier curriculum fusionné contient deux couches :
+    # - le catalogue générique UNITA (UNITA_M1, UNITA_BUSINESS, ...), utilisé
+    #   comme source des MLO ;
+    # - les modules spécifiques institutionnels (USMB_Sx_Ex), qui héritent
+    #   ces MLO via acquis_apprentissage.
+    # Quand les modules spécifiques existent, on ne doit pas ré-afficher le
+    # catalogue générique comme de vrais modules curriculaires, sinon on crée
+    # un faux semestre COMMON=-1 / "S-1" et des doublons visuels.
+    def _has_specific_institutional_modules(programme):
+        for cur_item in iter_curriculum_elements(programme):
+            cur_element = cur_item.get("element") or {}
+            cur_id = str(cur_element.get("id") or "").strip().upper()
+            if cur_id and not cur_id.startswith("UNITA_"):
+                return True
+        return False
+
+    hide_unita_catalogue_modules = _has_specific_institutional_modules(curriculum_data)
+
+    def _is_unita_catalogue_element(periode, element):
+        element_id = str(element.get("id") or "").strip().upper()
+        if not element_id.startswith("UNITA_"):
+            return False
+
+        # COMMON=-1 est un catalogue transversal, pas un semestre réel.
+        try:
+            numero = int(periode.get("numero"))
+        except Exception:
+            numero = None
+        if numero is not None and numero < 1:
+            return True
+
+        # A1/A2/A3 sont les années génériques de langue UNITA. Dans le
+        # programme fusionné avec USMB, les vrais modules affichables sont les
+        # lignes USMB_Sx_Ex ayant hérité des MLO.
+        periode_id = str(periode.get("id") or "").strip().upper()
+        if periode_id in {"A1", "A2", "A3", "COMMON", "GENERIC"}:
+            return True
+
+        # Sécurité : tout module UNITA_* reste considéré comme catalogue quand
+        # des modules institutionnels existent. Sans modules spécifiques, on ne
+        # filtre rien, ce qui conserve le comportement historique.
+        return hide_unita_catalogue_modules
+
+    def _base_row(periode, semestre, ue, option, parcours, element,
+                  element_id, element_code, element_name, element_type,
+                  linked):
+        return {
+            # Données référentiel / AC / compétence.
+            # Attention : `linked` contient aussi un `module_code` historique
+            # (= module déclaré dans le référentiel de compétences). On le
+            # conserve sous un autre nom, puis on réécrit ensuite le vrai
+            # module curriculum à afficher.
+            **linked,
+            "referentiel_module_code": linked.get("module_code"),
+
+            "semestre":    semestre,
+            "periode_id":  periode.get("id"),
+
+            "ue_id":       ue.get("id"),
+            "ue_code":     ue.get("code"),
+            "ue_name":     ue.get("intitule"),
+            "ue_type":     ue.get("type"),
+            "ue_credits":  get_ue_credits(ue),
+
+            "option_id":   option.get("id")       if option else None,
+            "option_code": option.get("code")     if option else None,
+            "option_name": option.get("intitule") if option else None,
+            "option_type": option.get("type")     if option else None,
+
+            "parcours":    parcours,
+
+            # IMPORTANT : le module affiché est TOUJOURS le module curriculum.
+            # Pour UNITA/USMB, c'est donc USMB_Sx_Ex, pas UNITA_FINANCE.
+            "module_id":           element_id,
+            "module_code":         element_code,
+            "module_name":         element_name,
+            "module_type":         element_type,
+            "module_credits":      get_element_credits(element),
+            "module_volume_total": element.get("volume_total", 0.0),
+
+            "orphan": False,
+        }
 
     # ── Parcours du curriculum ────────────────────────────────────────────────
     for item in iter_curriculum_elements(curriculum_data):
@@ -541,6 +694,13 @@ def build_visualisation_rows(competence_data, curriculum_data):
         element  = item["element"]
 
         element_id       = element.get("id")
+
+        # UNITA/USMB : éviter de ré-afficher le catalogue générique
+        # (UNITA_M1, UNITA_BUSINESS, COMMON=-1) quand les modules
+        # institutionnels USMB existent déjà avec les MLO hérités.
+        if hide_unita_catalogue_modules and _is_unita_catalogue_element(periode, element):
+            continue
+
         element_raw_code = element.get("code") or element.get("id")
         element_code     = normalize_module_code(element_raw_code)
         element_name     = element.get("nom")
@@ -549,55 +709,71 @@ def build_visualisation_rows(competence_data, curriculum_data):
         if not element_code:
             continue
 
-        linked_competences = comp_index.get(element_code, [])
-        if not linked_competences:
+        acquis_list = get_element_acquis(element)
+        acquis_by_id = {
+            _acquis_id(acquis): acquis
+            for acquis in acquis_list
+            if _acquis_id(acquis)
+        }
+
+        # Liste de couples (linked_competence_item, acquis_associe_ou_None).
+        # On combine :
+        # - jointure directe par module_code (historique Polytech/BUT/générique) ;
+        # - jointure indirecte par MLO contenu dans l'élément (UNITA/USMB).
+        linked_pairs = []
+
+        # Chemin A — ancien : AC.modules -> module curriculum.
+        direct_links = comp_index.get(element_code, [])
+        if direct_links:
+            curriculum_codes_found.add(element_code)
+
+        for linked in direct_links:
+            mlo_id = linked.get("mlo_id")
+            if mlo_id and mlo_id in acquis_by_id:
+                linked_pairs.append((linked, acquis_by_id[mlo_id]))
+            else:
+                # Sources historiques ou AC sans MLO identifiable : on conserve
+                # le comportement précédent sans fabriquer d'acquis.
+                linked_pairs.append((linked, None))
+
+        # Chemin B — UNITA : element.acquis_apprentissage[MLO] -> AC/PLO.
+        for acquis_id, acquis in acquis_by_id.items():
+            for linked in mlo_index.get(acquis_id, []):
+                linked_pairs.append((linked, acquis))
+                # Le module générique déclaré côté compétence est considéré
+                # couvert par un module curriculum spécifique ; cela évite de
+                # l'ajouter ensuite comme orphelin générique.
+                if linked.get("module_code"):
+                    curriculum_codes_found.add(linked["module_code"])
+
+        if not linked_pairs:
             continue
 
-        curriculum_codes_found.add(element_code)
-        acquis_list = get_element_acquis(element)
+        seen_rows = set()
+        for linked, acquis in linked_pairs:
+            acquis_id = _acquis_id(acquis)
+            dedupe_key = (
+                element_code,
+                linked.get("competence_code"),
+                linked.get("ac_code"),
+                acquis_id,
+            )
+            if dedupe_key in seen_rows:
+                continue
+            seen_rows.add(dedupe_key)
 
-        for linked in linked_competences:
-            base_row = {
-                "semestre":    semestre,
-                "periode_id":  periode.get("id"),
-
-                "ue_id":       ue.get("id"),
-                "ue_code":     ue.get("code"),
-                "ue_name":     ue.get("intitule"),
-                "ue_type":     ue.get("type"),
-                "ue_credits":  get_ue_credits(ue),
-
-                "option_id":   option.get("id")       if option else None,
-                "option_code": option.get("code")     if option else None,
-                "option_name": option.get("intitule") if option else None,
-                "option_type": option.get("type")     if option else None,
-
-                "parcours":    parcours,
-
-                "module_id":           element_id,
-                "module_code":         element_code,
-                "module_name":         element_name,
-                "module_type":         element_type,
-                "module_credits":      get_element_credits(element),
-                "module_volume_total": element.get("volume_total", 0.0),
-
-                "orphan": False,   # module trouvé dans le curriculum
-                **linked,
-            }
-
-            if acquis_list:
-                for acquis in acquis_list:
-                    rows.append({
-                        **base_row,
-                        "acquis_id":          acquis.get("id"),
-                        "acquis_description": acquis.get("description"),
-                    })
-            else:
-                rows.append({
-                    **base_row,
-                    "acquis_id":          None,
-                    "acquis_description": None,
-                })
+            base_row = _base_row(
+                periode, semestre, ue, option, parcours, element,
+                element_id, element_code, element_name, element_type,
+                linked,
+            )
+            rows.append({
+                **base_row,
+                "acquis_id":          acquis_id or None,
+                "acquis_description": (
+                    acquis.get("description") if isinstance(acquis, dict) else None
+                ),
+            })
 
     # ── Modules orphelins : présents dans le référentiel mais pas dans le curriculum ─
     # On déduit leur semestre depuis le code du module (chiffre des centaines).
@@ -606,7 +782,7 @@ def build_visualisation_rows(competence_data, curriculum_data):
     for mc, items in comp_index.items():
         if mc in curriculum_codes_found:
             continue
-        # Déduire le semestre depuis le code : [A-Z]+([5-9])[0-9]{2}
+        # Déduire le semestre depuis le code : [A-Z]+([0-9])[0-9]{2}
         sem_match = re.search(r'[A-Z]+([0-9])[0-9]{2}', mc)
         sem_deduit = int(sem_match.group(1)) if sem_match else None
 
@@ -879,7 +1055,7 @@ def _should_cluster_ue(ue_module_ids, total_modules):
 
 
 def format_ue_label(ue_code, ue_name=None):
-    """Libellé d'UE : "UE503 — Sciences de l'ingénieur" ou "UE503" ou "Sans UE"."""
+    """Libellé complet d'UE pour les hovers/panneaux de détail."""
     if not ue_code or str(ue_code).strip() == "":
         return "Sans UE"
     code = str(ue_code).strip()
@@ -887,6 +1063,71 @@ def format_ue_label(ue_code, ue_name=None):
     if name and name != code:
         return f"{code} — {name}"
     return code
+
+
+def compact_ue_label(ue_code, ue_name=None, max_chars=12):
+    """
+    Libellé court pour le graphe.
+
+    Ne modifie aucune donnée : uniquement l'affichage.
+    Objectif : éviter les labels bruts/synthétiques comme
+    "S1_GRP04" ou "S3 CHOIX_LANGUE_B..." qui rendent UNITA illisible.
+    Le libellé complet reste disponible dans le hover via format_ue_label().
+    """
+    raw_code = str(ue_code or "").strip()
+    raw_name = str(ue_name or "").strip()
+
+    if not raw_code:
+        return "Sans UE"
+    if raw_code == "Sans UE":
+        return "Sans UE"
+
+    # Préférer le nom métier quand le code est synthétique (S1_GRP04, etc.).
+    is_synthetic_group = bool(re.match(r"^S\d+[_\s-]*GRP\d+$", raw_code, flags=re.I))
+    label = raw_name if is_synthetic_group and raw_name else raw_code
+
+    label = label.replace("_", " ").strip()
+    label = re.sub(r"^S-?\d+\s*[-–—_ ]+", "", label, flags=re.I).strip()
+
+    # Groupes de langues : afficher une information courte et lisible.
+    m = re.search(r"CHOIX\s+LANG(?:UE)?\s*([ABC])", label, flags=re.I)
+    if m:
+        return f"Langue {m.group(1).upper()}"
+
+    m = re.search(r"\bLANG(?:UE)?\s*([ABC])\b", label, flags=re.I)
+    if m:
+        return f"Langue {m.group(1).upper()}"
+
+    # Modules génériques UNITA conservés faute de module spécifique : ne pas les
+    # faire passer pour des UE réelles.
+    generic_map = {
+        "UNITA BUSINESS": "Gén. Business",
+        "UNITA ECONOMICS": "Gén. Éco",
+        "UNITA FINANCE": "Gén. Finance",
+        "UNITA HR": "Gén. HR",
+        "UNITA MARKETING": "Gén. Marketing",
+        "BUSINESS": "Gén. Business",
+        "ECONOMICS": "Gén. Éco",
+        "FINANCE": "Gén. Finance",
+        "HR": "Gén. HR",
+        "MARKETING": "Gén. Marketing",
+    }
+    key = re.sub(r"\s+", " ", label.upper()).strip()
+    if key in generic_map:
+        return generic_map[key]
+
+    # Codes pédagogiques usuels : garder le code court.
+    m = re.search(r"\b(UAF|UAM|UAI|UA|LV|FRAN|ESPA|ITAL)\d+[A-Z0-9_]*\b", key)
+    if m:
+        return m.group(0)
+
+    if re.match(r"^GRP\d+$", key):
+        return "Groupe"
+
+    if len(label) > max_chars:
+        return label[: max_chars - 1].rstrip() + "…"
+
+    return label
 
 
 def _build_layout(comps, acs, modules, edges_am, expanded_clusters=None):
@@ -1594,7 +1835,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
     reference_data_per_px = span / PLOT_WIDTH_PX
 
     max_label_chars = max(
-        (len(ue_display.get(uc, uc)) for uc in ue_codes_sorted),
+        (len(compact_ue_label(uc, ue_names.get(uc))) for uc in ue_codes_sorted),
         default=4
     )
     label_width_px = max_label_chars * CHAR_WIDTH_PX + LABEL_PADDING_PX
@@ -1619,7 +1860,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
     ue_lx, ue_ly, ue_lt, ue_lcolor = [], [], [], []
     for i, uc in enumerate(ue_codes_sorted):
         color = UE_PALETTE[i % len(UE_PALETTE)]
-        label = ue_display.get(uc, uc)
+        label = compact_ue_label(uc, ue_names.get(uc))
         ue_lx.append(label_centers[uc])
         ue_ly.append(Y_UE_LABEL)
         ue_lt.append(f"<b>{_short_ue_label(label)}</b>")
@@ -1657,7 +1898,10 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
 
         label_x = label_centers[uc]
         ue_center = (x0 + x1) / 2
-        if abs(label_x - ue_center) > min_label_gap * 0.3:
+        # Sur les graphes denses (UNITA), les traits pointillés de décalage
+        # créent plus de bruit que d'information. On les garde seulement
+        # quand le nombre de labels est raisonnable.
+        if len(ue_codes_sorted) <= 18 and abs(label_x - ue_center) > min_label_gap * 0.3:
             shapes.append(dict(
                 type="line", x0=ue_center, x1=label_x,
                 y0=Y_UE_BAND_TOP, y1=Y_UE_LABEL - 0.25,
@@ -1880,7 +2124,7 @@ forested_visualisations_layout = html.Div([
         ]),
 
         html.Div([
-            html.Label(" ", style={**LABEL_STYLE,"visibility":"hidden"}),
+            html.Label(" ", style={**LABEL_STYLE,"visibility":"hidden"}),
             html.Button("✕ Réinitialiser", id="visualisation-back", n_clicks=0,
                 style={"height":"34px","padding":"0 14px",
                        "backgroundColor":"#F1F5F9","color":"#475569",

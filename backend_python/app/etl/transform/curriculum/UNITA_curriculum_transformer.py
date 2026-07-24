@@ -117,10 +117,15 @@ class UNITACurriculumTransformer(BaseTransformer):
         )
 
         # 2) Aplatir + construire la sortie prête à l'upsert.
+        #    Métadonnées techniques (generic_module_code, match_status,
+        #    source_sheet, source_cell) indexées par element_id : portées au
+        #    flat/upsert, JAMAIS dans le canonical.
+        elem_meta = self._index_elem_meta(normalized)
         flat_rows = self._flatten(
-            programme, scope, institution_code, upsert_institution_key)
+            programme, scope, institution_code, upsert_institution_key, elem_meta)
         upsert = self._build_upsert(
-            programme, scope, institution_code, upsert_institution_key, programme_id)
+            programme, scope, institution_code, upsert_institution_key,
+            programme_id, elem_meta)
 
         # 3) Traçabilité (le quality_report reste produit par l'ETL).
         credits_sum = sum(
@@ -213,7 +218,9 @@ class UNITACurriculumTransformer(BaseTransformer):
     # Flat (contrat curriculum) + traçabilité upsert
     # ------------------------------------------------------------------
 
-    def _flatten(self, programme, scope, institution_code, upsert_institution_key):
+    def _flatten(self, programme, scope, institution_code,
+                 upsert_institution_key, elem_meta=None):
+        elem_meta = elem_meta or {}
         rows = []
         for periode in programme.periodes:
             for groupe in self._iter_leaf_groups(periode.groupes_elements_pedagogiques):
@@ -223,12 +230,14 @@ class UNITACurriculumTransformer(BaseTransformer):
                         rows.append(self._flat_row(
                             programme, periode, groupe, element, ac,
                             scope, institution_code, upsert_institution_key,
+                            elem_meta.get(element.id, {}),
                         ))
         return rows
 
     @staticmethod
     def _flat_row(programme, periode, groupe, element, ac, scope,
-                  institution_code, upsert_institution_key):
+                  institution_code, upsert_institution_key, meta=None):
+        meta = meta or {}
         # La clé d'upsert utilise la clé TECHNIQUE (jamais vide) ; la colonne
         # institution_code reflète la VRAIE institution ("" si générique).
         upsert_key = "::".join([
@@ -266,19 +275,26 @@ class UNITACurriculumTransformer(BaseTransformer):
             # Acquis (MLO) — jamais de PLO
             "ac_id": ac.id if ac else "",
             "ac_description": ac.description if ac else "",
+            # Métadonnées techniques (générique<->spécifique) — JAMAIS canonical
+            "generic_module_code": meta.get("generic_module_code", ""),
+            "generic_ref_label": meta.get("generic_ref_label", ""),
+            "match_status": meta.get("match_status", ""),
+            "source_sheet": meta.get("source_sheet", ""),
+            "source_cell": meta.get("source_cell", ""),
             # Clé d'upsert (appliquée par le loader, pas ici)
             "upsert_institution_key": upsert_institution_key,
             "upsert_key": upsert_key,
         }
 
     def _build_upsert(self, programme, scope, institution_code,
-                      upsert_institution_key, programme_id):
+                      upsert_institution_key, programme_id, elem_meta=None):
         """Sortie « prête à l'upsert » : une entrée par ÉLÉMENT (unité
         d'upsert), avec sa clé composite. Le transformer ne fusionne rien.
 
         - institution_code   : VRAIE institution (None si générique) ;
         - upsert_institution_key : composant TECHNIQUE de la clé (jamais vide,
           "__GENERIC__" en générique)."""
+        elem_meta = elem_meta or {}
         elements = []
         n_groupes = 0
         n_acquis = 0
@@ -287,6 +303,7 @@ class UNITACurriculumTransformer(BaseTransformer):
                 n_groupes += 1
                 for element in getattr(groupe, "elements_pedagogiques", []):
                     n_acquis += len(element.acquis_apprentissage or [])
+                    meta = elem_meta.get(element.id, {})
                     elements.append({
                         "programme_id": programme_id,
                         "scope": scope,
@@ -295,6 +312,11 @@ class UNITACurriculumTransformer(BaseTransformer):
                         "periode_id": periode.id,
                         "groupe_code": groupe.code,
                         "element_id": element.id,
+                        "generic_module_code": meta.get("generic_module_code", ""),
+                        "generic_ref_label": meta.get("generic_ref_label", ""),
+                        "match_status": meta.get("match_status", ""),
+                        "source_sheet": meta.get("source_sheet", ""),
+                        "source_cell": meta.get("source_cell", ""),
                         "upsert_key": "::".join([
                             programme_id, scope, upsert_institution_key,
                             periode.id, groupe.code, element.id,
@@ -327,6 +349,30 @@ class UNITACurriculumTransformer(BaseTransformer):
                 yield from self._iter_leaf_groups(sous)
             else:
                 yield g
+
+    @staticmethod
+    def _index_elem_meta(normalized):
+        """element_id -> métadonnées techniques portées par le normalizer
+        (generic_module_code, match_status, source_sheet, source_cell).
+        Le générique n'en fournit pas -> défauts vides au flat/upsert."""
+        meta = {}
+
+        def walk(groupes):
+            for g in (groupes or []):
+                walk(g.get("sous_groupes"))
+                for e in (g.get("elements") or []):
+                    if e.get("id"):
+                        meta[e["id"]] = {
+                            "generic_module_code": e.get("generic_module_code", ""),
+                            "generic_ref_label": e.get("generic_ref_label", ""),
+                            "match_status": e.get("match_status", ""),
+                            "source_sheet": e.get("source_sheet", ""),
+                            "source_cell": e.get("source_cell", ""),
+                        }
+
+        for p in (normalized.get("periodes") or []):
+            walk(p.get("groupes"))
+        return meta
 
     @staticmethod
     def _as_float(v) -> float:

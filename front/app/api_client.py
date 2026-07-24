@@ -241,18 +241,24 @@ def admin_revoke_api_key(token: str, api_key_id: int) -> dict:
 
 def admin_upload_source(token: str, domain: str, source_name: str,
                         formation_name: str, filename: str,
-                        file_bytes: bytes) -> dict:
+                        file_bytes: bytes, institution: str = None) -> dict:
     """Téléverse un fichier source ; le backend traite UNIQUEMENT ce
-    fichier (process_file), jamais le pipeline complet."""
+    fichier (process_file), jamais le pipeline complet.
+
+    `institution` (optionnel) : vide -> curriculum générique ; renseigné
+    (ex. USMB) -> partie institution-specific (curriculum/unita)."""
+    data = {
+        "domain": domain,
+        "source_name": source_name,
+        "formation_name": formation_name,
+    }
+    if institution:
+        data["institution"] = institution
     try:
         response = requests.post(
             f"{API_BASE_URL}/admin/sources/upload",
             headers=_auth_headers(token=token),
-            data={
-                "domain": domain,
-                "source_name": source_name,
-                "formation_name": formation_name,
-            },
+            data=data,
             files={"file": (filename, file_bytes)},
             timeout=UPLOAD_TIMEOUT,
         )

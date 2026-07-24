@@ -26,7 +26,6 @@ import socket
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-
 import httpx
 
 from app.config import RAW_DATA_FOLDER
@@ -208,7 +207,12 @@ def import_api_source_and_process(domain: str, source_name: str,
     )
 
     try:
-        process_file(domain, source_name, destination)
+        summary = process_file(
+            domain,
+            source_name,
+            destination,
+            formation=formation_name,
+        )
     except Exception as exc:
         destination.unlink(missing_ok=True)
         logger.error(
@@ -220,7 +224,8 @@ def import_api_source_and_process(domain: str, source_name: str,
         ) from exc
 
     stem = destination.stem
-    return {
+
+    response = {
         "message": "API source imported and processed successfully",
         "raw_file": f"{domain}/{source_name}/{destination.name}",
         "processed_file": f"processed/{domain}/{source_name}/"
@@ -228,3 +233,20 @@ def import_api_source_and_process(domain: str, source_name: str,
         "analytics_file": f"analytics/{domain}/{source_name}/"
                           f"{stem}_flat.json",
     }
+
+    if isinstance(summary, dict):
+        response["programme_id"] = summary.get("programme_id")
+        response["output_path"] = summary.get("output_path")
+        response["added"] = summary.get("added")
+        response["updated"] = summary.get("updated")
+        response["total_elements"] = summary.get("total_elements")
+        response["scopes"] = summary.get("scopes")
+        response["institutions"] = summary.get("institutions")
+        response["quality_summary"] = summary.get("quality_summary")
+
+        # Pour les cas comme curriculum/unita, le vrai processed est celui
+        # retourné par le pipeline, pas forcément {raw_stem}_processed.json.
+        if summary.get("output_path"):
+            response["processed_file"] = summary["output_path"]
+
+    return response
