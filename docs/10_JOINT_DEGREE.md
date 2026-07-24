@@ -1,75 +1,128 @@
 # 10 — Source UNITA : Joint Degree SCRL
 
-## Objectif
+## Objectif du document
 
-Ce document décrit l’intégration de la source **UNITA — SCRL** dans ForestED.
-Le cas UNITA est un exemple de **Joint Degree** : une formation commune est décrite à deux niveaux :
+Ce document explique l'intégration de la source **UNITA — SCRL** dans ForestED.
+Il doit permettre à un développeur ou à un futur stagiaire de comprendre :
 
-1. un niveau **générique** : PLO, MLO et modules génériques du diplôme commun ;
-2. un niveau **institutionnel** : maquette réelle d’un établissement, ici USMB, avec semestres, UE/groupes et modules spécifiques.
+- ce que représente un Joint Degree dans ForestED ;
+- quelles données sont génériques et quelles données sont institutionnelles ;
+- comment la colonne `Correspondance générique` est utilisée ;
+- pourquoi les MLO sont hérités dans les modules spécifiques ;
+- quelles règles ne doivent pas être cassées.
 
-L’objectif n’est pas de remplacer la maquette USMB par des modules génériques, mais de relier les modules USMB aux compétences/PLO à travers les MLO.
+## Idée métier
 
-## Principe métier validé
+UNITA / SCRL est une formation commune portée par plusieurs établissements. Dans ForestED, on la représente avec deux couches complémentaires.
 
-La liaison finale utilisée par ForestED est :
+| Couche | Contenu | Rôle |
+|---|---|---|
+| **Générique UNITA** | PLO, MLO, modules génériques. | Décrit les compétences et acquis communs du diplôme. |
+| **Institutionnelle USMB** | Semestres, UE/groupes, modules réels de l'Excel USMB. | Décrit la maquette réellement suivie par les étudiants USMB. |
+
+Le but n'est pas de remplacer la maquette USMB par le catalogue générique. Le but est de relier les modules USMB aux PLO à travers les MLO.
+
+## Principe validé
+
+La liaison finale est :
 
 ```text
 PLO / compétence
-→ AC canonique construit depuis le PLO et le MLO
-→ MLO hérité
+→ AC canonique construit à partir du PLO et du MLO
+→ MLO
 → module spécifique USMB
 ```
 
-Il ne faut pas créer de relation métier directe de type :
+La relation suivante ne doit pas être utilisée comme relation métier finale :
 
 ```text
 module USMB → module générique UNITA
 ```
 
-La correspondance avec un module générique sert seulement à transmettre les MLO dans `acquis_apprentissage` du module spécifique.
+La correspondance générique sert seulement d'indication d'ETL pour hériter les MLO.
 
-## Données sources
+## Fichiers sources
 
-### Domaine competence
+### 1. Référentiel compétence générique
 
-Le domaine competence décrit le référentiel générique UNITA :
+Domaine :
 
 ```text
-Référentiel UNITA
-→ PLO
-→ MLO
-→ modules génériques
+competence
 ```
 
-Les AC canoniques sont construits sous une forme proche de :
+Source :
+
+```text
+unita
+```
+
+Rôle : produire les PLO, les MLO et les AC canoniques.
+
+Exemple d'AC canonique :
 
 ```text
 PLO2__UNITA_ECONOMICS_MLO01
 ```
 
-Le suffixe après `__` correspond au MLO. C’est cette partie qui permet ensuite la jointure avec les modules spécifiques.
+La partie avant `__` indique le PLO. La partie après `__` indique le MLO.
 
-### Domaine curriculum
+### 2. Curriculum générique UNITA
 
-Le domaine curriculum contient deux couches :
+Domaine :
 
-1. **Catalogue générique UNITA** : modules comme `UNITA_BUSINESS`, `UNITA_ECONOMICS`, `UNITA_M1`, etc. Il sert de source de MLO.
-2. **Maquette institutionnelle USMB** : semestres, UE/groupes, modules réels extraits de l’Excel.
+```text
+curriculum
+```
 
-Les modules génériques ne doivent pas être affichés comme de vraies UE USMB quand des modules spécifiques existent déjà.
+Rôle : porter le catalogue des modules génériques et leurs MLO.
 
-## Colonne “Correspondance générique” dans l’Excel
+Exemples :
 
-L’Excel USMB contient une colonne ajoutée :
+```text
+UNITA_BUSINESS
+UNITA_ECONOMICS
+UNITA_FINANCE
+UNITA_HR
+UNITA_MARKETING
+UNITA_M1
+UNITA_M2
+UNITA_M3
+UNITA_M4
+UNITA_M5
+```
+
+Ces modules ne sont pas des UE institutionnelles USMB. Ils servent de référence.
+
+### 3. Maquette institutionnelle Excel USMB
+
+Domaine :
+
+```text
+curriculum
+```
+
+Rôle : créer les vrais modules curriculum : semestres, UE/groupes, ECTS, heures, modules spécifiques.
+
+Exemples :
+
+```text
+USMB_S1_E02 — Economie générale 1
+USMB_S1_E03 — Introduction au management des organisations
+USMB_S1_E10 — Espagnol : Structures de la langue - Théorie
+```
+
+## Colonne `Correspondance générique`
+
+L'Excel USMB contient une colonne ajoutée :
 
 ```text
 Correspondance générique
 ```
 
-Elle permet de dire à quel module générique un module spécifique correspond.
+Elle contient une valeur lisible, pas un code technique.
 
-Valeurs utilisées :
+Valeurs autorisées :
 
 ```text
 Business
@@ -81,36 +134,65 @@ Language B
 Language C
 ```
 
-Règles :
+À éviter dans l'Excel utilisateur :
 
-- `Business`, `Economics`, `Finance`, `HR`, `Marketing` sont résolus vers les modules génériques métier correspondants.
-- `Language B` et `Language C` sont résolus selon l’année de la feuille : JD L1, JD L2 ou JD L3.
-- Une cellule vide signifie : aucun héritage de MLO.
-- S6 peut rester vide si les modules ne sont pas encore stabilisés ou s’il n’existe pas de module générique correspondant.
+```text
+UNITA_BUSINESS
+UNITA_M1
+UNITA_ECONOMICS
+```
+
+Ces codes sont internes au pipeline.
+
+## Résolution des correspondances
+
+### Modules métier
+
+| Valeur Excel | Code interne |
+|---|---|
+| `Business` | `UNITA_BUSINESS` |
+| `Economics` | `UNITA_ECONOMICS` |
+| `Finance` | `UNITA_FINANCE` |
+| `HR` | `UNITA_HR` |
+| `Marketing` | `UNITA_MARKETING` |
+
+### Modules de langue
+
+Les langues dépendent de l'année de la feuille.
+
+| Feuille | Valeur Excel | Code interne |
+|---|---|---|
+| JD L1 | `Language B` | `UNITA_M1` |
+| JD L1 | `Language C` | `UNITA_M2` |
+| JD L2 | `Language B` | `UNITA_M3` |
+| JD L2 | `Language C` | `UNITA_M4` |
+| JD L3 | `Language C` | `UNITA_M5` |
+
+Une cellule vide signifie :
+
+```text
+ne pas hériter de MLO
+```
+
+C'est volontaire pour les lignes non stabilisées ou sans équivalent générique fiable.
 
 ## Héritage des MLO
 
-Quand une ligne Excel contient :
+Exemple Excel :
 
 ```text
 Economie générale 1 → Economics
 ```
 
-le pipeline résout :
+Le pipeline fait :
 
 ```text
 Economics → UNITA_ECONOMICS
+UNITA_ECONOMICS → liste de MLO
+USMB_S1_E02 reçoit ces MLO dans acquis_apprentissage
 ```
 
-Puis il copie les MLO de `UNITA_ECONOMICS` dans le champ :
-
-```json
-"acquis_apprentissage": []
-```
-
-du module spécifique USMB.
-
-Exemple attendu dans le curriculum processed :
+Exemple processed attendu :
 
 ```json
 {
@@ -125,52 +207,116 @@ Exemple attendu dans le curriculum processed :
 }
 ```
 
-Ce choix respecte le modèle existant : aucun champ supplémentaire n’a été ajouté au modèle curriculum.
+Le modèle curriculum n'a pas été modifié. On utilise le champ existant `acquis_apprentissage`.
 
-## Visualisation
+## Pipeline détaillé
 
-La visualisation utilise deux chemins de jointure :
+```text
+1. Extractor
+   lit JSON ou Excel.
 
-### Chemin historique
+2. Normalizer UNITA
+   lit la structure source.
+   détecte la colonne Correspondance générique.
+   produit des records avec generic_module_code.
+
+3. Transformer competence UNITA
+   produit les PLO, niveaux et AC canoniques PLOx__MLO.
+
+4. Transformer curriculum UNITA
+   produit le Programme canonique et les lignes flat/upsert.
+
+5. Upsert curriculum
+   fusionne catalogue générique + maquette USMB.
+   copie les MLO génériques vers les modules spécifiques.
+
+6. Visualisation
+   joint les PLO aux modules spécifiques via les MLO.
+```
+
+## Visualisations
+
+### Chemin classique
+
+Pour Polytech, BUT et beaucoup de sources classiques :
 
 ```text
 AC.modules → module curriculum
 ```
 
-Ce chemin continue de fonctionner pour Polytech, BUT et les sources classiques.
+### Chemin Joint Degree
 
-### Chemin UNITA / Joint Degree
+Pour UNITA :
 
 ```text
 module.acquis_apprentissage[MLO]
 → AC canonique PLOx__MLO
-→ compétence/PLO
+→ PLO / compétence
 ```
 
-Ce chemin permet d’afficher les modules spécifiques USMB au lieu d’afficher uniquement les modules génériques UNITA.
+Les vues doivent afficher prioritairement les modules spécifiques USMB. Le catalogue générique peut rester visible seulement pour signaler une zone encore non mappée, par exemple `UNITA_FINANCE` si aucun module spécifique n'est encore mappé à `Finance`.
 
-## Catalogue générique et affichage
+## Import recommandé
 
-Dans les vues, le catalogue générique UNITA est traité comme une couche technique.
+Dans l'administration :
 
-Règles d’affichage :
+```text
+1. competence / unita / SCRL / référentiel générique PLO-MLO
+2. curriculum / unita / SCRL / curriculum générique corrigé
+3. curriculum / unita / SCRL / Excel USMB avec Correspondance générique
+```
 
-- si des modules spécifiques USMB portent déjà les MLO, on masque les modules génériques correspondants ;
-- si un module générique n’a pas encore de module spécifique correspondant, il peut rester visible comme élément à mapper ;
-- le faux semestre `S-1` / `COMMON=-1` ne doit pas être présenté comme un semestre réel.
+Après modification d'un normalizer ou transformer : relancer le pipeline ou réimporter dans le même ordre.
 
-## Fichiers modifiés
+## Vérifications
 
-Fichiers concernés par l’intégration UNITA :
+### Vérifier la compilation frontend
+
+```bash
+docker compose exec frontend python -m py_compile /app/forested_visualisations.py
+```
+
+### Vérifier les tests backend
+
+```bash
+docker exec -it forested_backend python -m pytest tests/ -q
+```
+
+### Vérifier les MLO hérités
+
+Vérifier dans `data/processed/curriculum/unita/SCRL_processed.json` que les modules `USMB_*` mappés ont un champ `acquis_apprentissage` non vide.
+
+## Limites connues
+
+- Les vues globales UNITA sont denses parce qu'un MLO peut être lié à plusieurs PLO et plusieurs modules.
+- S6 peut rester vide si la maquette n'est pas encore stabilisée.
+- `Finance` peut rester générique si aucun module USMB n'est mappé vers `Finance`.
+- Les modules génériques ne doivent pas être interprétés comme de vraies UE USMB.
+
+## À ne pas faire
+
+```text
+❌ Ajouter references_elements au modèle sans décision métier officielle.
+❌ Mettre les codes UNITA_* directement dans l'Excel utilisateur.
+❌ Copier des MLO quand Correspondance générique est vide.
+❌ Présenter COMMON=-1 / S-1 comme un vrai semestre.
+❌ Modifier le backend API pour résoudre un problème purement visuel.
+❌ Casser le chemin classique AC.modules utilisé par Polytech, BUT et USMB licence.
+```
+
+## Fichiers concernés
+
+À connaître pour maintenir UNITA :
 
 ```text
 app/etl/normalize/unita_curriculum_normalizer.py
+app/etl/transform/competence/UNITA_competence_transformer.py
 app/etl/transform/curriculum/UNITA_curriculum_transformer.py
 app/etl/load/curriculum_upsert_service.py
 front/app/forested_visualisations.py
 ```
 
-Fichiers à ne pas modifier pour cette logique :
+Fichiers normalement non concernés :
 
 ```text
 app/models/curriculum_models.py
@@ -179,36 +325,3 @@ app/etl/extract/excel_extractor.py
 app/etl/pipeline.py
 front/app/api_client.py
 ```
-
-## Points de contrôle
-
-Après import UNITA, vérifier :
-
-```text
-1. Les modules USMB existent dans SCRL_processed.json.
-2. Les modules USMB mappés ont des acquis_apprentissage non vides.
-3. Les modules S6 laissés vides restent sans acquis_apprentissage.
-4. Les vues affichent des modules USMB et pas seulement UNITA_BUSINESS / UNITA_ECONOMICS / etc.
-5. Polytech et BUT continuent à s’afficher comme avant.
-```
-
-Commandes utiles :
-
-```bash
-python -m py_compile front/app/forested_visualisations.py
-python -m pytest tests/ -q
-```
-
-Dans Docker :
-
-```bash
-docker compose exec frontend python -m py_compile /app/forested_visualisations.py
-docker exec -it forested_backend python -m pytest tests/ -q
-```
-
-## Limites connues
-
-- La vue globale UNITA peut être dense, car un même MLO peut être relié à plusieurs PLO et plusieurs modules spécifiques.
-- Les filtres par semestre, UE ou compétence sont importants pour une lecture détaillée.
-- `Finance` restera générique tant qu’aucun module spécifique n’est mappé vers `Finance` dans l’Excel.
-- S6 reste volontairement incomplet si l’Excel n’est pas stabilisé.

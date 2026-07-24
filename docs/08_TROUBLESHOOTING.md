@@ -1,102 +1,131 @@
 # 08 — Troubleshooting
 
-Problèmes réellement rencontrés sur ce projet, avec leur solution. Premier
-réflexe dans tous les cas :
+Premier réflexe : lire les logs, pas deviner.
 
 ```bash
-docker compose ps -a                          # qui tourne, qui a quitté ?
-docker logs forested_backend --tail 50        # la vraie cause est ici
+docker compose ps -a
+docker logs forested_backend --tail 100
+docker logs forested_frontend --tail 100
 ```
 
-## 1. Build impossible : `TLS handshake timeout` / `no such host` (Docker Hub)
+## 1. Build impossible : `TLS handshake timeout` / `no such host`
 
-Problème réseau entre ta machine et Docker Hub (Internet coupé, VPN, proxy
-Docker Desktop). Solutions :
+Problème réseau Docker Hub. Utiliser les images locales :
 
 ```bash
-docker compose up -d          # SANS --build : les images locales suffisent
-docker pull python:3.11-slim  # test de connectivité quand le réseau revient
+docker compose up -d
 ```
 
-Rappel : `--build` n'est nécessaire que si `requirements.txt` ou un
-`Dockerfile` a changé. Vérifier aussi Docker Desktop → Settings → Resources →
-Proxies.
+`--build` n'est nécessaire que si `requirements.txt` ou un Dockerfile a changé.
 
-## 2. `alembic heads` ne retourne rien
+## 2. Conteneur bloqué en `Removing`
 
-Alembic ne voit aucune migration. Causes constatées : la baseline n'est pas
-dans `alembic/versions/` (elle doit y être, pas à la racine d'`alembic/`),
-et/ou le gabarit s'appelle `script.py` au lieu de **`script.py.mako`**
-(extension perdue à la copie). Corriger l'arborescence puis :
+Symptôme :
+
+```text
+Container forested_frontend Removing
+```
+
+Solution sûre :
 
 ```bash
-docker exec -it forested_backend alembic heads      # 0001_baseline (head)
-docker exec -it forested_backend alembic current    # 0001_baseline (head)
+Ctrl+C
+docker ps -a
+docker rm -f forested_frontend
+docker compose down
+docker compose up -d
 ```
 
-Si les tables existent déjà mais que la base n'est pas tamponnée :
-`alembic stamp head` (n'exécute rien, enregistre juste la version).
+Si Docker Desktop / WSL reste bloqué :
+
+```bash
+wsl --shutdown
+```
+
+Puis redémarrer Docker Desktop.
+
+À ne pas faire pour ce cas :
+
+```bash
+docker compose down -v
+docker volume prune
+```
+
+car cela peut supprimer le volume PostgreSQL.
 
 ## 3. Backend attaque SQLite au lieu de PostgreSQL
 
-Symptôme dans les logs : `sqlite3.OperationalError: table users already
-exists` pendant la migration. Cause : une ligne `DATABASE_URL=sqlite:///...`
-active dans `.env` (elle écrase le défaut PostgreSQL du compose). Solution :
-supprimer ou recommenter cette ligne, puis `docker compose up -d backend`.
-Attendu ensuite dans les logs : `Context impl PostgresqlImpl`.
+Symptôme : erreurs SQLite pendant Alembic.
+
+Cause probable : `DATABASE_URL=sqlite:///...` dans `.env`.
+
+Solution : supprimer cette ligne et relancer le backend.
 
 ## 4. `forested_backend Exited (1)`
 
-Le backend a planté au démarrage (souvent pendant `alembic upgrade`).
+Lire la première erreur :
 
 ```bash
-docker compose logs --no-color --tail=100 backend
+docker compose logs --no-color --tail=150 backend
 ```
 
-Lire la PREMIÈRE erreur : `No module named 'app'` → `prepend_sys_path = .`
-manquant dans `alembic.ini` ; `password authentication failed` →
-`POSTGRES_PASSWORD` modifié dans `.env` alors que le volume `pgdata` a été
-créé avec l'ancien ; erreurs sqlite → voir n°3 ; `RuntimeError AUTH_SECRET_KEY`
-→ `APP_ENV=production` traîne dans le `.env` local (à retirer).
+| Symptôme | Cause probable | Action |
+|---|---|---|
+| `No module named app` | mauvais chemin Alembic | vérifier `prepend_sys_path = .` |
+| `password authentication failed` | mot de passe PostgreSQL changé avec volume existant | restaurer l'ancien mot de passe ou recréer volontairement le volume |
+| `RuntimeError AUTH_SECRET_KEY` | `APP_ENV=production` en local | retirer `APP_ENV=production` |
+| erreur Pydantic `extra_forbidden` | champ non prévu dans le modèle | ne pas injecter de champ canonique non déclaré |
 
-## 5. `required variable APP_DOMAIN is missing a value`
+## 5. `/docs` renvoie 404
 
-**Normal en local** : c'est le garde-fou du compose de production. Ce fichier
-est réservé au serveur. En local : `docker compose up -d` tout court. Pour
-seulement vérifier la fusion : `docker compose -f docker-compose.yml -f
-docker-compose.prod.yml config` (avec des variables fictives dans `.env`).
+En production, c'est normal. En local, vérifier que `APP_ENV=production` n'est pas actif.
 
-## 6. Un service `Exited (255)` après un redémarrage de Docker/PC
+## 6. Upload USMB MATH → 422
 
-Historique : il manquait la politique de redémarrage. Résolu — les trois
-services portent `restart: unless-stopped`. Si cela se reproduit :
-`docker compose up -d` relance tout ; vérifier la politique avec
-`docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' forested_backend`.
+Comportement voulu si le fichier est hors gabarit. Le fichier raw rejeté doit être nettoyé automatiquement.
 
-## 7. Tests en échec avec des chemins `/api/v1/api/v1/...`
+## 7. UNITA : les modules spécifiques USMB ne s'affichent pas
 
-Erreur historique : le script de migration des tests vers `/api/v1` avait
-doublé les préfixes (il s'était auto-modifié en vivant dans `tests/`).
-Résolu — si un double préfixe réapparaît quelque part, chercher la chaîne
-`/api/v1/api/v1` et la réduire à `/api/v1`. Côté frontend, vérifier que
-`API_BASE_URL` contient UNE fois `/api/v1`
-(`http://backend:8000/api/v1`) et que les chemins d'appel n'en rajoutent pas.
+Vérifier d'abord le processed : les modules `USMB_*` doivent avoir des `acquis_apprentissage` non vides quand la colonne `Correspondance générique` est remplie.
 
-## 8. Upload USMB « MATH » → 422
+Si aucun module USMB n'a de MLO :
 
-**Comportement voulu.** Le fichier MATH est hors gabarit (3 compétences côte
-à côte, sans matrice AC×EC) : il est refusé avec un message explicite et le
-fichier raw est nettoyé. Exclu en v1/v2 — ne pas chercher à le forcer.
+- vérifier la colonne `Correspondance générique` dans l'Excel ;
+- vérifier l'ordre d'import : compétence générique, curriculum générique, Excel USMB ;
+- relancer le pipeline après correction.
 
-## 9. `/docs` renvoie 404
+Si les MLO existent dans le processed mais pas dans la vue :
 
-En **production** (`APP_ENV=production`), c'est **normal** : Swagger, ReDoc
-et openapi.json sont désactivés volontairement. En dev, `/docs` doit
-répondre — sinon vérifier qu'`APP_ENV=production` ne traîne pas dans `.env`.
+- vérifier `front/app/forested_visualisations.py` ;
+- relancer le frontend ;
+- vider le cache navigateur si nécessaire.
+
+## 8. UNITA : apparition de `S-1` ou `COMMON=-1`
+
+`S-1` vient du catalogue générique UNITA. Ce n'est pas un vrai semestre institutionnel.
+
+Correction attendue : côté visualisation, masquer ou neutraliser le catalogue générique quand les modules spécifiques USMB existent. Ne pas modifier le modèle pour résoudre ce problème d'affichage.
+
+## 9. UNITA : graphe trop dense
+
+Normal si la vue affiche toutes les compétences, tous les MLO et tous les modules. Utiliser :
+
+- filtre Compétence ;
+- filtre Semestre ;
+- forêt curriculaire avec clic sur UE/module ;
+- sunburst en mode distribution semestrielle.
+
+La densité n'est pas automatiquement un bug. Il faut distinguer :
+
+```text
+données fausses      → problème ETL
+liens corrects mais vue illisible → problème visualisation/ergonomie
+```
 
 ## 10. Rappels de prudence
 
-- `docker compose down` : OK. **`docker compose down -v` : JAMAIS** sans
-  vouloir effacer la base (volume `pgdata`).
-- `forested.db` (racine backend) : ancien SQLite conservé comme secours de
-  rollback — ne pas le confondre avec la base active (PostgreSQL).
+- `docker compose down` : OK.
+- `docker compose down -v` : dangereux pour PostgreSQL.
+- Ne pas supprimer `data/processed` ou `data/analytics` sans savoir quels fichiers doivent être régénérés.
+- Après modification frontend : `docker compose restart frontend` suffit souvent.
+- Après modification backend/ETL : relancer le backend ou le pipeline selon le fichier modifié.

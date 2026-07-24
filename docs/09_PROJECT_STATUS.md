@@ -4,79 +4,90 @@
 
 ## Résumé
 
-ForestED est **fonctionnel en local** : trois sources chargées et visualisées,
-administration complète, base PostgreSQL avec migrations, API versionnée,
-**219/219 tests verts**. La configuration de déploiement serveur (Caddy HTTPS) est
-**prête côté applicatif** mais dormante jusqu'à disposer d'un vrai serveur.
-Rien de bloquant n'est en attente.
+ForestED est fonctionnel en local avec authentification, permissions par source, API versionnée, administration, upload/import, pipeline ETL multi-sources et visualisations interactives.
 
-## Terminé et validé
+Le projet supporte maintenant quatre familles de sources en local :
 
-- **Backend sécurisé** : JWT (login par nom OU email, Argon2id), clés API
-  SHA-256 (secret montré une fois, expiration, désactivation définitive),
-  permissions par source (wildcard `*`), garde-fous anti-lockout, anti-SSRF
-  (import API), anti-path-traversal (upload), 401/403 distincts.
-- **API versionnée `/api/v1`** ; `/health` non préfixé ; Swagger en dev,
-  désactivé en production ; `TrustedHostMiddleware` configurable (hosts
-  internes ajoutés automatiquement).
-- **PostgreSQL 16 + Alembic** : baseline `0001_baseline` appliquée et
-  tamponnée (`alembic current` = head) ; migrations exécutées à chaque
-  démarrage ; données reprises depuis l'ancien SQLite (avec réparation d'une
-  incohérence FK héritée — clés orphelines réaffectées).
-- **ETL multi-sources** : registry déclarative, contrats R4 testés,
-  quality_report sauvegardé, séparation stricte competence/curriculum.
-- **Administration complète** : utilisateurs (actions par ligne
-  activer/désactiver/supprimer + formulaire de modification), permissions
-  (retrait par ligne), clés API (badges d'état, désactivation par ligne),
-  confirmations sur toutes les actions destructives, upload de fichiers,
-  import API JSON, bouton « Relancer le pipeline », dropdown de sources
-  alimenté par la registry.
-- **Frontend** : deux forêts cohérentes (couleurs unifiées, légende par mode,
-  focus préservé), labels UE réels, dashboard partagé invité
-  (`/access/<clé>`).
-- **Ops** : `restart: unless-stopped` sur les 3 services ; Caddy/C1 livré
-  (Caddyfile, compose prod avec `ports: !reset`, doc de déploiement).
-- **Tests : 219/219 verts** (auth, permissions, clés, upload, import, registry,
-  contrats, normalizers/transformers, pipeline). Un fichier de 8 tests de
-  séparation stricte des domaines (`test_usmb_domain_separation.py`) a été
-  livré mais n'est **pas encore ajouté** à `tests/` — une fois copié, la suite
-  passe à 227.
+```text
+BUT
+Polytech
+usmb_licence
+unita
+```
 
-## Sources en production (locale)
+La configuration de déploiement serveur avec Caddy HTTPS est prête côté applicatif, mais reste à valider sur un vrai serveur public.
+
+## Terminé et validé fonctionnellement
+
+- **Backend sécurisé** : login par nom ou email, JWT, clés API hashées, permissions par source, garde-fous anti-lockout, 401/403 séparés.
+- **API `/api/v1`** : endpoints de données filtrés par source, `/health` hors préfixe, Swagger seulement en dev.
+- **PostgreSQL + Alembic** : base d'authentification séparée des données pédagogiques.
+- **ETL multi-sources** : extractor, normalizer, transformer, loader, registry déclarative, contrats R4, quality reports.
+- **Séparation competence/curriculum** : les référentiels et les curricula restent dans leurs modèles respectifs.
+- **Administration** : utilisateurs, permissions, clés API, upload/import, relance pipeline.
+- **Frontend** : cartographie, forêts, sunburst, parcours, dashboard invité.
+- **UNITA / SCRL** : intégration Joint Degree avec PLO/MLO génériques + maquette institutionnelle USMB, liaison via MLO hérités dans les modules spécifiques.
+- **Ops local** : Docker Compose avec `restart: unless-stopped`, Caddy préparé pour production.
+
+## Sources en production locale
 
 | Source | competence | curriculum | Notes |
 |---|---|---|---|
-| **BUT** | ✅ | ✅ | Excel « Annexe », parcours/UE optionnelles |
-| **Polytech** | ✅ (2 formats) | ✅ | JSON phpMyAdmin + maquette |
-| **usmb_licence** | ✅ (17 licences) | ✅ **lite** | croix + couleurs, parcours ; ECTS/heures à 0.0 signalés ; **MATH exclu** (hors gabarit, 422 clair) |
+| **BUT** | ✅ | ✅ | Excel Annexe, parcours, UE, ressources/SAÉ selon source. |
+| **Polytech** | ✅ | ✅ | Référentiel compétences + catalogue/maquette IDU. |
+| **usmb_licence** | ✅ | ✅ lite | Référentiels APC reconstruits en curriculum-lite ; ECTS/heures absents signalés. |
+| **unita** | ✅ | ✅ | Joint Degree SCRL : PLO/MLO génériques + maquette USMB ; modules spécifiques reliés via MLO hérités. |
 
-## Reste à faire (non bloquant)
+## État de la source UNITA
+
+Fait :
+
+- lecture du référentiel générique PLO/MLO ;
+- lecture du curriculum générique UNITA ;
+- lecture de l'Excel USMB avec colonne `Correspondance générique` ;
+- héritage des MLO dans `acquis_apprentissage` des modules USMB ;
+- visualisation des modules spécifiques USMB via jointure MLO ;
+- masquage/neutralisation du catalogue générique quand il ne doit pas être présenté comme une vraie maquette.
+
+À surveiller :
+
+- les vues globales restent denses ;
+- S6 peut rester incomplet si les modules ne sont pas stabilisés ;
+- `Finance` reste générique tant qu'aucune ligne Excel n'est mappée vers `Finance` ;
+- les tests dédiés UNITA doivent être consolidés si la source devient critique.
+
+## Tests et vérifications
+
+Base documentaire précédente : `240/240` tests attendus sur la suite existante.
+
+Commandes de vérification :
+
+```bash
+docker exec -it forested_backend python -m pytest tests/ -q
+docker compose exec frontend python -m py_compile /app/forested_visualisations.py
+```
+
+Vérification UNITA recommandée : compter les modules `USMB_*` avec `acquis_apprentissage` non vide dans `SCRL_processed.json`.
+
+## Reste à faire non bloquant
 
 | Item | Nature |
 |---|---|
-| Mail de demande de vraies maquettes USMB (Pégase / ROF CDM-fr / Excel scolarité) | démarche externe — remplacera le curriculum-lite |
-| C2 — rate limiting (proxy) | préparation possible en avance |
-| C3 — sauvegardes (dump postgres + data/) | préparation possible en avance |
-| Fiche client courte / version commerciale de [05_API_CLIENT.md](05_API_CLIENT.md) | rédaction optionnelle |
-| Ajouter `test_usmb_domain_separation.py` dans `tests/` (livré, +8 tests → 227) | copie du fichier livré |
-| Déploiement serveur réel + validation des 10 critères C1 | attend VPS + domaine |
-| Parseur MATH | optionnel |
-| Refactors R2/R3 (audit transformers) | optionnels |
-| Migration lifespan FastAPI (4 DeprecationWarning au démarrage) | optionnel |
+| Ajouter des tests automatisés dédiés UNITA | sécuriser normalizer, upsert MLO, visualisation MLO-based. |
+| Améliorer l'ergonomie des vues globales UNITA | graphe dense, labels, regroupement par UE/semestre. |
+| Demander de vraies maquettes USMB licence | remplacer le curriculum-lite par des maquettes complètes. |
+| C2 rate limiting | sécurité proxy. |
+| C3 sauvegardes | dump PostgreSQL + sauvegarde `data/`. |
+| Déploiement serveur réel | valider Caddy HTTPS avec domaine. |
+| Parser MATH USMB | optionnel, fichier hors gabarit. |
+| Refactors R2/R3 | optionnels. |
+| Migration lifespan FastAPI | optionnel. |
 
 ## Pour un développeur qui reprend le projet
 
-1. Lire [01_ARCHITECTURE.md](01_ARCHITECTURE.md) puis
-   [06_ETL_DEVELOPER_GUIDE.md](06_ETL_DEVELOPER_GUIDE.md).
-2. Démarrer en local ([02_INSTALLATION_LOCALE.md](02_INSTALLATION_LOCALE.md))
-   et vérifier : `pytest` 219/219 verts, `alembic current` = head, login OK.
-3. Points d'entrée du code : `backend_python/app/main.py` (routes),
-   `app/etl/pipeline.py` (ETL), `app/etl/transform/flat_contract.py`
-   (contrats), `front/app/main.py` (Dash) et `front/app/api_client.py`
-   (unique point de contact frontend→API).
-4. Toute nouvelle source suit le pas-à-pas du guide ETL — le couple
-   normalizer/transformer USMB est l'implémentation de référence la plus
-   récente et la plus complète.
-5. Invariants à ne jamais casser : permissions par source côté serveur,
-   secret des clés montré une fois, séparation competence/curriculum,
-   contrats R4, aucune donnée inventée par l'ETL.
+1. Lire [01_ARCHITECTURE.md](01_ARCHITECTURE.md) pour comprendre les invariants.
+2. Lire [06_ETL_DEVELOPER_GUIDE.md](06_ETL_DEVELOPER_GUIDE.md) avant de modifier une source.
+3. Lire [10_JOINT_DEGREE.md](10_JOINT_DEGREE.md) avant de toucher à UNITA.
+4. Démarrer en local avec [02_INSTALLATION_LOCALE.md](02_INSTALLATION_LOCALE.md).
+5. Vérifier les tests backend et la compilation frontend.
+6. Ne jamais casser : permissions par source, séparation competence/curriculum, modèles stricts, contrats R4, non-invention de données.

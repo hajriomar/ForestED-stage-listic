@@ -2,108 +2,121 @@
 
 **Sommaire** : [Rôles](#rôles) · [Utilisateurs](#utilisateurs) ·
 [Permissions](#permissions-par-source) · [Clés API](#clés-api) ·
-[Upload de fichiers](#upload-de-fichiers-sources) · [Import API](#import-depuis-une-api-json) ·
-[Pipeline](#relancer-le-pipeline-complet) · [Bonnes pratiques](#bonnes-pratiques)
+[Upload](#upload-de-fichiers-sources) · [UNITA](#ordre-dimport-recommandé-pour-unita--scrl) ·
+[Import API](#import-depuis-une-api-json) · [Pipeline](#relancer-le-pipeline-complet) ·
+[Bonnes pratiques](#bonnes-pratiques)
 
-La page **Administration** (sidebar : Utilisateurs · Permissions par source ·
-Clés API · Fichiers sources) n'est visible que pour le rôle `admin`. Chaque
-action est re-vérifiée côté backend. Toutes les actions destructives passent
-par un **panneau de confirmation** ; « Annuler » ne déclenche rien.
+La page **Administration** est réservée au rôle `admin`. Les contrôles sont aussi refaits côté backend : cacher un bouton dans le frontend ne suffit jamais à autoriser une action.
 
 ## Rôles
 
-- **admin** : accès total (données de toutes les sources, administration,
-  pipeline).
-- **viewer** : accès en lecture aux seules sources autorisées par ses
-  permissions.
+| Rôle | Droits |
+|---|---|
+| **admin** | Accès total aux données, utilisateurs, permissions, clés API, upload/import, pipeline. |
+| **viewer** | Lecture seule des sources autorisées. |
 
 ## Utilisateurs
 
-- **Créer** : formulaire (nom, email, mot de passe ≥ 10 caractères, rôle).
-- **Modifier** : formulaire « Modifier un utilisateur » — nouveau nom, nouvel
-  email, rôle, mot de passe (unicité vérifiée par le backend).
-- **Activer / Désactiver** : boutons par ligne dans le tableau (vert/orange).
-  Un utilisateur désactivé ne peut plus se connecter ; réactivable à tout
-  moment.
-- **Supprimer** : bouton rouge par ligne — supprime aussi ses permissions.
-- Garde-fous anti-lockout (backend) : impossible de se désactiver soi-même,
-  de se rétrograder soi-même, ou de supprimer/désactiver le **dernier admin
-  actif** — l'erreur est affichée explicitement.
+Actions disponibles : créer, modifier, activer/désactiver et supprimer.
 
-## Permissions (par source)
+Garde-fous backend : impossible de se désactiver soi-même, de se rétrograder soi-même, ou de supprimer/désactiver le dernier admin actif.
 
-Sélectionner un utilisateur → son tableau de permissions s'affiche.
+## Permissions par source
 
-- **Ajouter / mettre à jour** : choisir une ou plusieurs sources + scopes
-  (`read:competence`, `read:curriculum`, `read:analytics`, ou « tous les
-  droits de lecture `*` »).
-- **Retirer** : bouton rouge par ligne (avec confirmation) — l'utilisateur
-  perd immédiatement l'accès à la source.
-- La source **`*`** = toutes les sources, actuelles ET futures. À réserver
-  aux comptes de confiance.
+Une permission s'applique à une source :
+
+```text
+BUT
+Polytech
+usmb_licence
+unita
+*
+```
+
+Scopes possibles :
+
+```text
+read:competence
+read:curriculum
+read:analytics
+*
+```
+
+La source `*` donne accès à toutes les sources actuelles et futures. À réserver aux comptes de confiance.
 
 ## Clés API
 
-Deux types :
-
 | Type | Usage |
 |---|---|
-| **data** | Intégration technique : le client appelle l'API avec le header `X-API-Key` (voir [05_API_CLIENT.md](05_API_CLIENT.md)). |
-| **dashboard** | Partage du dashboard : la création affiche un **lien** `/access/<clé>` à transmettre au client (session invitée, lecture seule). |
+| **data** | Intégration technique avec header `X-API-Key`. |
+| **dashboard** | Lien invité `/access/<clé>` pour partager une visualisation en lecture seule. |
 
-Règles importantes :
-
-- Le **secret est affiché UNE SEULE FOIS** à la création (seule son empreinte
-  SHA-256 est stockée). En cas de perte : désactiver et recréer.
-- **La désactivation est DÉFINITIVE** : pas de réactivation ni de
-  prolongation (choix de sécurité assumé). Le tableau affiche l'état
-  (Actif / Désactivé / Expiré), l'expiration et le dernier usage.
-- Une clé n'est **jamais** admin (ni routes `/admin`, ni pipeline).
-- Expiration optionnelle à la création (« Expire dans N jours », vide =
-  jamais).
+Règles : le secret est affiché une seule fois ; une clé désactivée ne se réactive pas ; une clé n'est jamais admin ; une clé par client permet de couper un seul accès en cas de problème.
 
 ## Upload de fichiers sources
 
-Section **Fichiers sources → Fichier local** :
+Section : **Fichiers sources → Fichier local**.
 
-- **Domaine** : Compétences ou Curricula ;
-- **Source** : le dropdown propose les sources présentes dans les données ET
-  les sources supportées par le pipeline (registry) — une nouvelle source est
-  donc proposable avant son premier fichier ;
-- **Formation** : préfixe du fichier (`[A-Za-z0-9_-]`, ex. `DROIT`, `QLIO`) ;
-- **Fichier** : `.json`, `.xlsx`, `.xls`, `.csv` — 20 Mo max.
+| Champ | Rôle |
+|---|---|
+| **Domaine** | `competence` ou `curriculum`. |
+| **Source** | Source du pipeline : `Polytech`, `BUT`, `usmb_licence`, `unita`, etc. |
+| **Formation** | Préfixe logique du fichier, par exemple `IDU`, `QLIO`, `SCRL`. |
+| **Fichier** | `.json`, `.xlsx`, `.xls`, `.csv`, 20 Mo max. |
 
-Le fichier est enregistré dans `raw/<domaine>/<source>/<FORMATION>_<nom>` puis
-**traité immédiatement — lui seul** (jamais de relance globale). Erreurs :
+Le fichier est enregistré dans :
 
-- **409** : un fichier du même nom existe déjà (pas d'écrasement silencieux) ;
-- **422** : le pipeline a rejeté le fichier (format non reconnu, ex. USMB
-  MATH hors gabarit) — le fichier raw est alors **supprimé automatiquement**,
-  aucun résidu.
+```text
+raw/<domaine>/<source>/<FORMATION>_<nom_fichier>
+```
+
+Puis traité immédiatement. Une erreur 422 supprime le fichier raw rejeté pour éviter les résidus.
+
+## Ordre d'import recommandé pour UNITA / SCRL
+
+Pour la source `unita`, respecter l'ordre suivant :
+
+```text
+1. Domaine competence / source unita / formation SCRL
+   → référentiel générique UNITA : PLO, MLO, modules génériques.
+
+2. Domaine curriculum / source unita / formation SCRL
+   → curriculum générique UNITA corrigé : catalogue de modules génériques.
+
+3. Domaine curriculum / source unita / formation SCRL
+   → Excel institutionnel USMB avec la colonne Correspondance générique.
+```
+
+La colonne `Correspondance générique` permet d'hériter les MLO dans les modules spécifiques USMB. Une cellule vide signifie : aucun héritage.
+
+Valeurs attendues dans cette colonne :
+
+```text
+Business
+Economics
+Finance
+HR
+Marketing
+Language B
+Language C
+```
+
+Ne pas écrire les codes techniques `UNITA_M1`, `UNITA_BUSINESS`, etc. dans l'Excel utilisateur, sauf décision explicite de changer la règle métier.
 
 ## Import depuis une API JSON
 
-Section **Fichiers sources → API JSON** : mêmes champs + URL (http/https,
-GET uniquement). Protections intégrées : refus des adresses privées/localhost
-(anti-SSRF), redirections refusées, réponse JSON obligatoire, 20 Mo max,
-en-têtes sensibles jamais journalisés. Comportement 409/422 identique à
-l'upload.
+L'import API accepte une URL HTTP/HTTPS en GET, avec protections : refus des adresses privées/localhost, redirections refusées, JSON obligatoire, taille max 20 Mo, mêmes règles 409/422 que l'upload local.
 
 ## Relancer le pipeline complet
 
-Bouton « Relancer le pipeline » (section Fichiers sources, avec
-confirmation) : retraite **tous** les fichiers de `raw/` (toutes sources,
-tous domaines) et régénère `processed/` et `analytics/` — sans rien supprimer
-ni re-téléverser. Utile après une mise à jour des transformers. L'opération
-peut prendre plusieurs minutes (un spinner s'affiche).
+Le bouton **Relancer le pipeline** retraite tous les fichiers présents dans `raw/` et régénère `processed/` et `analytics/`.
+
+À utiliser après modification d'un normalizer, d'un transformer, de la registry ou après correction de données sources.
 
 ## Bonnes pratiques
 
-- Ne pas donner la source `*` à tout le monde — attribuer les sources au cas
-  par cas.
-- **Partage d'un dashboard** → clé de type `dashboard` (lien) ;
-  **intégration technique** → clé de type `data` (header X-API-Key).
-- Conserver le principe « un client = une clé » : la désactivation coupe
-  alors un seul client.
-- Vérifier le `*_quality.json` dans `analytics/` après l'upload d'une
-  nouvelle source USMB.
+- Attribuer les permissions au plus petit périmètre possible.
+- Préférer une clé par client.
+- Vérifier les fichiers `*_quality.json` après chaque nouvelle source.
+- Pour UNITA, vérifier que les modules USMB mappés ont des `acquis_apprentissage` après l'import.
+- Ne jamais utiliser `docker compose down -v` pour résoudre un simple problème d'affichage ou de redémarrage.
