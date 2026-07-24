@@ -358,7 +358,7 @@ def build_competence_items(competence_data):
     - UNITA    : ac.modules vers modules génériques + extraction du MLO
                  depuis le code AC (PLOx__UNITA_..._MLOyy)
 
-    Important UNITA : le champ `mlo_id` permet ensuite de relier un module
+    Important sources MLO : le champ `mlo_id` permet ensuite de relier un module
     spécifique USMB à un AC/PLO via ses `acquis_apprentissage`, sans créer de
     lien direct module spécifique -> module générique dans le modèle.
     """
@@ -435,14 +435,14 @@ def build_visualisation_rows(competence_data, curriculum_data):
     - ancien modèle curriculum Polytech
     - nouveau modèle curriculum BUT/Polytech/UNITA
 
-    Point clé UNITA :
+    Point clé Joint Degree / sources MLO :
     ----------------
     Les modules spécifiques USMB ne sont pas liés directement aux modules
     génériques. Ils héritent des MLO dans `acquis_apprentissage`.
 
     La jointure complète fait donc deux chemins :
       A. chemin historique : AC.modules -> module curriculum
-      B. chemin UNITA       : module.acquis_apprentissage[MLO] -> AC/PLO
+      B. chemin par MLO       : module.acquis_apprentissage[MLO] -> AC/PLO
 
     Ainsi la visualisation affiche les modules spécifiques USMB quand ils
     portent les mêmes MLO que les AC canoniques PLOx__MLO.
@@ -584,7 +584,7 @@ def build_visualisation_rows(competence_data, curriculum_data):
 
     # Index module_code -> liste de comp_items (chemin historique direct).
     comp_index = {}
-    # Index MLO_ID -> liste de comp_items (chemin UNITA via acquis_apprentissage).
+    # Index MLO_ID -> liste de comp_items (chemin par MLO via acquis_apprentissage).
     mlo_index = {}
 
     for item in competence_items:
@@ -600,53 +600,92 @@ def build_visualisation_rows(competence_data, curriculum_data):
     # à éviter d'ajouter en fin de fonction des faux "orphelins" génériques.
     curriculum_codes_found = set()
 
+    # Parcourir une seule fois le curriculum : cela permet de construire des
+    # indices génériques sans hypothèse sur le nom de la source.
+    curriculum_items = list(iter_curriculum_elements(curriculum_data))
 
-    # UNITA : le fichier curriculum fusionné contient deux couches :
-    # - le catalogue générique UNITA (UNITA_M1, UNITA_BUSINESS, ...), utilisé
-    #   comme source des MLO ;
-    # - les modules spécifiques institutionnels (USMB_Sx_Ex), qui héritent
-    #   ces MLO via acquis_apprentissage.
-    # Quand les modules spécifiques existent, on ne doit pas ré-afficher le
-    # catalogue générique comme de vrais modules curriculaires, sinon on crée
-    # un faux semestre COMMON=-1 / "S-1" et des doublons visuels.
-    def _has_specific_institutional_modules(programme):
-        for cur_item in iter_curriculum_elements(programme):
-            cur_element = cur_item.get("element") or {}
-            cur_id = str(cur_element.get("id") or "").strip().upper()
-            if cur_id and not cur_id.startswith("UNITA_"):
-                return True
-        return False
+    def _element_has_institution(element):
+        """
+        Indique si un élément appartient explicitement à une couche
+        institutionnelle. Ce champ est optionnel dans le modèle, donc les
+        anciennes sources restent compatibles.
+        """
+        institutions = element.get("institutions") if isinstance(element, dict) else None
+        return bool(institutions)
 
-    hide_unita_catalogue_modules = _has_specific_institutional_modules(curriculum_data)
+    def _period_key(periode):
+        return (
+            str(periode.get("id") or ""),
+            str(periode.get("numero") or ""),
+        )
 
-    def _is_unita_catalogue_element(periode, element):
-        element_id = str(element.get("id") or "").strip().upper()
-        if not element_id.startswith("UNITA_"):
-            return False
+    # Un Joint Degree peut contenir deux couches dans le même programme :
+    # - une couche de référence/catalogue : modules génériques, MLO, blocs communs ;
+    # - une couche institutionnelle : vraie maquette d'un établissement.
+    # La détection ci-dessous est volontairement générique : elle ne dépend
+    # ni du nom de la source, ni du préfixe des modules, ni d'un établissement.
+    period_has_institutional_elements = {}
+    programme_has_institutional_layer = False
 
-        # COMMON=-1 est un catalogue transversal, pas un semestre réel.
+    for cur_item in curriculum_items:
+        cur_period = cur_item.get("periode") or {}
+        cur_element = cur_item.get("element") or {}
+        key = _period_key(cur_period)
+        has_inst = _element_has_institution(cur_element)
+        period_has_institutional_elements[key] = (
+            period_has_institutional_elements.get(key, False) or has_inst
+        )
+        programme_has_institutional_layer = programme_has_institutional_layer or has_inst
+
+    def _safe_int(value):
         try:
-            numero = int(periode.get("numero"))
+            return int(value)
         except Exception:
-            numero = None
+            return None
+
+    def _is_reference_period(periode):
+        """
+        Détecte une période technique de référence/catalogue sans hardcoding
+        source. Cette période doit rester affichable, mais elle ne doit pas
+        apparaître comme un vrai semestre S-1/S0.
+        """
+        numero = _safe_int(periode.get("numero"))
         if numero is not None and numero < 1:
             return True
 
-        # A1/A2/A3 sont les années génériques de langue UNITA. Dans le
-        # programme fusionné avec USMB, les vrais modules affichables sont les
-        # lignes USMB_Sx_Ex ayant hérité des MLO.
-        periode_id = str(periode.get("id") or "").strip().upper()
-        if periode_id in {"A1", "A2", "A3", "COMMON", "GENERIC"}:
+        period_text = normalize_label(
+            f"{periode.get('id') or ''} "
+            f"{periode.get('code') or ''} "
+            f"{periode.get('nom') or ''} "
+            f"{periode.get('intitule') or ''}"
+        )
+        reference_tokens = (
+            "COMMON", "COMMUN", "GENERIC", "GENERIQUE", "GÉNÉRIQUE",
+            "CATALOG", "CATALOGUE", "REFERENCE", "RÉFÉRENCE",
+            "REFERENTIEL", "RÉFÉRENTIEL",
+        )
+        if any(token in period_text for token in reference_tokens):
             return True
 
-        # Sécurité : tout module UNITA_* reste considéré comme catalogue quand
-        # des modules institutionnels existent. Sans modules spécifiques, on ne
-        # filtre rien, ce qui conserve le comportement historique.
-        return hide_unita_catalogue_modules
+        # Cas Joint Degree générique : si un programme contient une couche
+        # institutionnelle, toute période sans élément institutionnel est une
+        # couche de référence. Cela couvre les catalogues par années, modules
+        # génériques ou blocs de correspondance, sans dépendre d'un préfixe.
+        if programme_has_institutional_layer:
+            return not period_has_institutional_elements.get(_period_key(periode), False)
+
+        return False
+
+    def _curriculum_layer_for(periode, element):
+        if _is_reference_period(periode):
+            return "reference"
+        if _element_has_institution(element):
+            return "institutional"
+        return "standard"
 
     def _base_row(periode, semestre, ue, option, parcours, element,
                   element_id, element_code, element_name, element_type,
-                  linked):
+                  linked, curriculum_layer="standard"):
         return {
             # Données référentiel / AC / compétence.
             # Attention : `linked` contient aussi un `module_code` historique
@@ -673,7 +712,7 @@ def build_visualisation_rows(competence_data, curriculum_data):
             "parcours":    parcours,
 
             # IMPORTANT : le module affiché est TOUJOURS le module curriculum.
-            # Pour UNITA/USMB, c'est donc USMB_Sx_Ex, pas UNITA_FINANCE.
+            # Pour un Joint Degree, c'est donc le module institutionnel, pas le module de référence.
             "module_id":           element_id,
             "module_code":         element_code,
             "module_name":         element_name,
@@ -682,10 +721,11 @@ def build_visualisation_rows(competence_data, curriculum_data):
             "module_volume_total": element.get("volume_total", 0.0),
 
             "orphan": False,
+            "curriculum_layer": curriculum_layer,
         }
 
     # ── Parcours du curriculum ────────────────────────────────────────────────
-    for item in iter_curriculum_elements(curriculum_data):
+    for item in curriculum_items:
         periode  = item["periode"]
         semestre = item["semestre"]
         ue       = item["ue"]
@@ -693,13 +733,14 @@ def build_visualisation_rows(competence_data, curriculum_data):
         parcours = item["parcours"]
         element  = item["element"]
 
-        element_id       = element.get("id")
+        element_id = element.get("id")
+        curriculum_layer = _curriculum_layer_for(periode, element)
 
-        # UNITA/USMB : éviter de ré-afficher le catalogue générique
-        # (UNITA_M1, UNITA_BUSINESS, COMMON=-1) quand les modules
-        # institutionnels USMB existent déjà avec les MLO hérités.
-        if hide_unita_catalogue_modules and _is_unita_catalogue_element(periode, element):
-            continue
+        # Une couche de référence/catalogue reste visible, mais n'est jamais
+        # présentée comme un semestre réel. Cela évite S-1/S0 sans masquer le
+        # catalogue générique utile à la compréhension du mapping.
+        if curriculum_layer == "reference":
+            semestre = None
 
         element_raw_code = element.get("code") or element.get("id")
         element_code     = normalize_module_code(element_raw_code)
@@ -736,7 +777,7 @@ def build_visualisation_rows(competence_data, curriculum_data):
                 # le comportement précédent sans fabriquer d'acquis.
                 linked_pairs.append((linked, None))
 
-        # Chemin B — UNITA : element.acquis_apprentissage[MLO] -> AC/PLO.
+        # Chemin B — MLO : element.acquis_apprentissage[MLO] -> AC/PLO.
         for acquis_id, acquis in acquis_by_id.items():
             for linked in mlo_index.get(acquis_id, []):
                 linked_pairs.append((linked, acquis))
@@ -766,6 +807,7 @@ def build_visualisation_rows(competence_data, curriculum_data):
                 periode, semestre, ue, option, parcours, element,
                 element_id, element_code, element_name, element_type,
                 linked,
+                curriculum_layer=curriculum_layer,
             )
             rows.append({
                 **base_row,
@@ -1002,7 +1044,8 @@ def _build_graph_data(rows):
             modules[mi] = {"name": r.get("module_name", ""),
                            "code": r.get("module_code", ""),
                            "ue_code": _ue_code,
-                           "ue_name": _ue_name}
+                           "ue_name": _ue_name,
+                           "ue_layer": r.get("curriculum_layer", "standard")}
 
         if (cc, ac) not in seen_ca:
             edges_ca.append((cc, ac)); seen_ca.add((cc, ac))
@@ -1054,24 +1097,28 @@ def _should_cluster_ue(ue_module_ids, total_modules):
     return False
 
 
-def format_ue_label(ue_code, ue_name=None):
+def format_ue_label(ue_code, ue_name=None, ue_layer=None):
     """Libellé complet d'UE pour les hovers/panneaux de détail."""
     if not ue_code or str(ue_code).strip() == "":
         return "Sans UE"
     code = str(ue_code).strip()
     name = str(ue_name or "").strip()
+
+    if ue_layer == "reference":
+        base = name if name and name != code else code
+        return f"Catalogue générique — {base}" if base else "Catalogue générique"
+
     if name and name != code:
         return f"{code} — {name}"
     return code
 
 
-def compact_ue_label(ue_code, ue_name=None, max_chars=12):
+def compact_ue_label(ue_code, ue_name=None, max_chars=12, ue_layer=None):
     """
     Libellé court pour le graphe.
 
     Ne modifie aucune donnée : uniquement l'affichage.
-    Objectif : éviter les labels bruts/synthétiques comme
-    "S1_GRP04" ou "S3 CHOIX_LANGUE_B..." qui rendent UNITA illisible.
+    Objectif : éviter les labels bruts/synthétiques ou trop longs.
     Le libellé complet reste disponible dans le hover via format_ue_label().
     """
     raw_code = str(ue_code or "").strip()
@@ -1089,6 +1136,15 @@ def compact_ue_label(ue_code, ue_name=None, max_chars=12):
     label = label.replace("_", " ").strip()
     label = re.sub(r"^S-?\d+\s*[-–—_ ]+", "", label, flags=re.I).strip()
 
+    # Couche de référence/catalogue : règle générique, indépendante de la
+    # source et des codes de modules. On préfixe seulement le libellé visible.
+    if ue_layer == "reference":
+        reference_label = raw_name if raw_name and raw_name != raw_code else label
+        reference_label = reference_label.replace("_", " ").strip()
+        if len(reference_label) > max_chars:
+            reference_label = reference_label[: max_chars - 1].rstrip() + "…"
+        return f"Gén. {reference_label}" if reference_label else "Générique"
+
     # Groupes de langues : afficher une information courte et lisible.
     m = re.search(r"CHOIX\s+LANG(?:UE)?\s*([ABC])", label, flags=re.I)
     if m:
@@ -1098,23 +1154,7 @@ def compact_ue_label(ue_code, ue_name=None, max_chars=12):
     if m:
         return f"Langue {m.group(1).upper()}"
 
-    # Modules génériques UNITA conservés faute de module spécifique : ne pas les
-    # faire passer pour des UE réelles.
-    generic_map = {
-        "UNITA BUSINESS": "Gén. Business",
-        "UNITA ECONOMICS": "Gén. Éco",
-        "UNITA FINANCE": "Gén. Finance",
-        "UNITA HR": "Gén. HR",
-        "UNITA MARKETING": "Gén. Marketing",
-        "BUSINESS": "Gén. Business",
-        "ECONOMICS": "Gén. Éco",
-        "FINANCE": "Gén. Finance",
-        "HR": "Gén. HR",
-        "MARKETING": "Gén. Marketing",
-    }
     key = re.sub(r"\s+", " ", label.upper()).strip()
-    if key in generic_map:
-        return generic_map[key]
 
     # Codes pédagogiques usuels : garder le code court.
     m = re.search(r"\b(UAF|UAM|UAI|UA|LV|FRAN|ESPA|ITAL)\d+[A-Z0-9_]*\b", key)
@@ -1444,6 +1484,7 @@ def _build_layout(comps, acs, modules, edges_am, expanded_clusters=None):
             "code": modules[mi]["code"],
             "ue": modules[mi].get("ue_code") or "Sans UE",
             "ue_name": modules[mi].get("ue_name", ""),
+            "ue_layer": modules[mi].get("ue_layer", "standard"),
         }
 
     for ue, x in cluster_positions.items():
@@ -1743,7 +1784,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
         mx.append(x); my.append(y)
         mhov.append(
             f"<b>{m['code'] or m['id']}</b><br>"
-            f"<i>{m['name']}</i><br>{format_ue_label(m['ue'], m.get('ue_name'))}<br><br>"
+            f"<i>{m['name']}</i><br>{format_ue_label(m['ue'], m.get('ue_name'), m.get('ue_layer'))}<br><br>"
             f"🖱 Cliquez pour explorer"
         )
         mcd.append(key)
@@ -1760,11 +1801,16 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
         customdata=mcd, name="Modules", showlegend=True
     ))
 
-    # Mapping ue_code -> ue_name (depuis les modules) pour les hovers
+    # Mapping ue_code -> ue_name / ue_layer (depuis les modules) pour les hovers
     ue_names = {}
+    ue_layers = {}
     for _m in node_meta.values():
-        if _m.get("type") == "module" and _m.get("ue_name"):
-            ue_names.setdefault(_m["ue"], _m["ue_name"])
+        if _m.get("type") == "module":
+            if _m.get("ue_name"):
+                ue_names.setdefault(_m["ue"], _m["ue_name"])
+            layer = _m.get("ue_layer", "standard")
+            if _m["ue"] not in ue_layers or ue_layers[_m["ue"]] == "standard":
+                ue_layers[_m["ue"]] = layer
 
     # ── Clusters d'UE ───────────────────────────────────────────────────
     klx, kly, klhov, klcd, klsz, klop, kltxt = [], [], [], [], [], [], []
@@ -1772,7 +1818,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
         if m["type"] != "cluster": continue
         x, y = pos[key]
         klx.append(x); kly.append(y)
-        ue_label = format_ue_label(m["ue"], ue_names.get(m["ue"]))
+        ue_label = format_ue_label(m["ue"], ue_names.get(m["ue"]), ue_layers.get(m["ue"]))
         kltxt.append(str(m["count"]))
         if m["ue"] in ue_expansion_blocked:
             klhov.append(
@@ -1835,7 +1881,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
     reference_data_per_px = span / PLOT_WIDTH_PX
 
     max_label_chars = max(
-        (len(compact_ue_label(uc, ue_names.get(uc))) for uc in ue_codes_sorted),
+        (len(compact_ue_label(uc, ue_names.get(uc), ue_layer=ue_layers.get(uc))) for uc in ue_codes_sorted),
         default=4
     )
     label_width_px = max_label_chars * CHAR_WIDTH_PX + LABEL_PADDING_PX
@@ -1860,7 +1906,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
     ue_lx, ue_ly, ue_lt, ue_lcolor = [], [], [], []
     for i, uc in enumerate(ue_codes_sorted):
         color = UE_PALETTE[i % len(UE_PALETTE)]
-        label = compact_ue_label(uc, ue_names.get(uc))
+        label = compact_ue_label(uc, ue_names.get(uc), ue_layer=ue_layers.get(uc))
         ue_lx.append(label_centers[uc])
         ue_ly.append(Y_UE_LABEL)
         ue_lt.append(f"<b>{_short_ue_label(label)}</b>")
@@ -1871,7 +1917,7 @@ def create_forest_graph(rows, selected_node=None, semester_filter=None, expanded
             x=ue_lx, y=ue_ly, mode="text",
             text=ue_lt, textfont=dict(size=10, color=ue_lcolor),
             hovertext=[
-                f"<b>{format_ue_label(uc, ue_names.get(uc))}</b><br>{len(ue_module_map.get(uc, []))} module(s)"
+                f"<b>{format_ue_label(uc, ue_names.get(uc), ue_layers.get(uc))}</b><br>{len(ue_module_map.get(uc, []))} module(s)"
                 f"{' (groupée)' if ue_is_clustered.get(uc) else ''}"
                 for uc in ue_codes_sorted
             ],
